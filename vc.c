@@ -589,6 +589,48 @@ int vc_rgb_to_gray(IVC* src, IVC* dst) {
 	return 1;
 }
 
+int vc_bgr_to_rgb(IVC* src, IVC* dst)
+{
+	unsigned char* datasrc = (unsigned char*)src->data;
+	int bytesperline_src = src->width * src->channels;
+	int channels_src = src->channels;
+
+	unsigned char* datadst = (unsigned char*)dst->data;
+	int bytesperline_dst = dst->width * dst->channels;
+	int channels_dst = dst->channels;
+
+	int width = src->width;
+	int height = src->height;
+
+	int x, y;
+	long int pos_src, pos_dst;
+
+	if ((src->width <= 0) || (src->height <= 0) || (src->data == NULL))
+		return 0;
+
+	if ((src->width != dst->width) || (src->height != dst->height))
+		return 0;
+
+	if ((src->channels != 3) || (dst->channels != 3))
+		return 0;
+
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			pos_src = y * bytesperline_src + x * channels_src;
+			pos_dst = y * bytesperline_dst + x * channels_dst;
+
+			// Swap B and R channels
+			datadst[pos_dst] = datasrc[pos_src + 2]; // R
+			datadst[pos_dst + 1] = datasrc[pos_src + 1]; // G
+			datadst[pos_dst + 2] = datasrc[pos_src];     // B
+		}
+	}
+
+	return 1;
+}
+
 int vc_rgb_to_hsv(IVC* src, IVC* dst)
 {
 	unsigned char* datasrc = (unsigned char*)src->data;
@@ -1889,7 +1931,14 @@ int vc_binary_blob_info(IVC* src, OVC* blobs, int nblobs)
 	return 1;
 }
 
-int vc_draw_blobs(IVC* binary, OVC* blobs, int nblobs)
+int vc_draw_blobs(
+	IVC* binary,
+	OVC* blobs,
+	int nblobs,
+	unsigned char sq_r, unsigned char sq_g, unsigned char sq_b,
+	unsigned char cr_r, unsigned char cr_g, unsigned char cr_b,
+	int thickness
+)
 {
 	unsigned char* data = (unsigned char*)binary->data;
 
@@ -1898,11 +1947,11 @@ int vc_draw_blobs(IVC* binary, OVC* blobs, int nblobs)
 	int bytesperline = binary->bytesperline;
 	int channels = binary->channels;
 
-	int i, x, y;
+	int i, x, y, t;
 	long int pos;
 
 	if ((binary == NULL) || (blobs == NULL)) return 0;
-	if (channels != 1) return 0;
+	if (thickness < 1) thickness = 1;
 
 	for (i = 0; i < nblobs; i++)
 	{
@@ -1914,57 +1963,107 @@ int vc_draw_blobs(IVC* binary, OVC* blobs, int nblobs)
 		int xc = blobs[i].xc;
 		int yc = blobs[i].yc;
 
-		// Top & Bottom
-		for (x = xmin; x <= xmax; x++)
+		// ----------- DRAW RECTANGLE -----------
+		for (t = 0; t < thickness; t++)
 		{
-			if (ymin >= 0 && ymin < height)
+			// Top & Bottom
+			for (x = xmin; x <= xmax; x++)
 			{
-				pos = ymin * bytesperline + x;
-				data[pos] = 255;
+				if (ymin + t >= 0 && ymin + t < height && x >= 0 && x < width)
+				{
+					pos = (ymin + t) * bytesperline + x * channels;
+					if (channels == 1)
+						data[pos] = (sq_r > 127) ? 255 : 0;
+					else
+					{
+						data[pos] = sq_r;
+						data[pos + 1] = sq_g;
+						data[pos + 2] = sq_b;
+					}
+				}
+
+				if (ymax - t >= 0 && ymax - t < height && x >= 0 && x < width)
+				{
+					pos = (ymax - t) * bytesperline + x * channels;
+					if (channels == 1)
+						data[pos] = (sq_r > 127) ? 255 : 0;
+					else
+					{
+						data[pos] = sq_r;
+						data[pos + 1] = sq_g;
+						data[pos + 2] = sq_b;
+					}
+				}
 			}
 
-			if (ymax >= 0 && ymax < height)
+			// Left & Right
+			for (y = ymin; y <= ymax; y++)
 			{
-				pos = ymax * bytesperline + x;
-				data[pos] = 255;
+				if (xmin + t >= 0 && xmin + t < width && y >= 0 && y < height)
+				{
+					pos = y * bytesperline + (xmin + t) * channels;
+					if (channels == 1)
+						data[pos] = (sq_r > 127) ? 255 : 0;
+					else
+					{
+						data[pos] = sq_r;
+						data[pos + 1] = sq_g;
+						data[pos + 2] = sq_b;
+					}
+				}
+
+				if (xmax - t >= 0 && xmax - t < width && y >= 0 && y < height)
+				{
+					pos = y * bytesperline + (xmax - t) * channels;
+					if (channels == 1)
+						data[pos] = (sq_r > 127) ? 255 : 0;
+					else
+					{
+						data[pos] = sq_r;
+						data[pos + 1] = sq_g;
+						data[pos + 2] = sq_b;
+					}
+				}
 			}
 		}
 
-		// Left & Right
-		for (y = ymin; y <= ymax; y++)
+		// ----------- DRAW CROSS -----------
+		int size = 5;
+
+		for (t = -thickness / 2; t <= thickness / 2; t++)
 		{
-			if (xmin >= 0 && xmin < width)
+			// Horizontal
+			for (x = xc - size; x <= xc + size; x++)
 			{
-				pos = y * bytesperline + xmin;
-				data[pos] = 255;
+				if (x >= 0 && x < width && yc + t >= 0 && yc + t < height)
+				{
+					pos = (yc + t) * bytesperline + x * channels;
+					if (channels == 1)
+						data[pos] = (cr_r > 127) ? 255 : 0;
+					else
+					{
+						data[pos] = cr_r;
+						data[pos + 1] = cr_g;
+						data[pos + 2] = cr_b;
+					}
+				}
 			}
 
-			if (xmax >= 0 && xmax < width)
+			// Vertical
+			for (y = yc - size; y <= yc + size; y++)
 			{
-				pos = y * bytesperline + xmax;
-				data[pos] = 255;
-			}
-		}
-
-		int size = 5; // adjust if needed
-
-		// Horizontal
-		for (x = xc - size; x <= xc + size; x++)
-		{
-			if (x >= 0 && x < width && yc >= 0 && yc < height)
-			{
-				pos = yc * bytesperline + x;
-				data[pos] = 0;
-			}
-		}
-
-		// Vertical
-		for (y = yc - size; y <= yc + size; y++)
-		{
-			if (y >= 0 && y < height && xc >= 0 && xc < width)
-			{
-				pos = y * bytesperline + xc;
-				data[pos] = 0;
+				if (y >= 0 && y < height && xc + t >= 0 && xc + t < width)
+				{
+					pos = y * bytesperline + (xc + t) * channels;
+					if (channels == 1)
+						data[pos] = (cr_r > 127) ? 255 : 0;
+					else
+					{
+						data[pos] = cr_r;
+						data[pos + 1] = cr_g;
+						data[pos + 2] = cr_b;
+					}
+				}
 			}
 		}
 	}

@@ -102,55 +102,53 @@ int main(void) {
 		/* Verifica se conseguiu ler a frame */
 		if (frame.empty()) break;
 
-		/* N�mero da frame a processar */
+		/* Número da frame a processar */
 		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
-		/* Exemplo de inser��o texto na frame */
+		// Adicionar texto com ao vídeo
 		str = "RESOLUCAO: " + std::to_string(video.width) + "x" + std::to_string(video.height);
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 0, 0), 2);
+		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 0, 0), 1);
 
-		// Fa�a o seu c�digo aqui...
-		/*
-		// Cria uma nova imagem IVC
-		IVC *image = vc_image_new(video.width, video.height, 3, 255);
-		// Copia dados de imagem da estrutura cv::Mat para uma estrutura IVC
+		// Faça o seu código aqui...
+		
+		// Copia pixeis do frame para a imagem IVC
 		memcpy(image->data, frame.data, video.width * video.height * 3);
-		// Executa uma fun��o da nossa biblioteca vc
-		vc_rgb_get_green(image);
-		// Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
-		memcpy(frame.data, image->data, video.width * video.height * 3);
-		// Liberta a mem�ria da imagem IVC que havia sido criada
-		vc_image_free(image);
-		*/
-		cv::Mat frame_rgb;
-		cv::cvtColor(frame, frame_rgb, cv::COLOR_BGR2RGB);
-		memcpy(image->data, frame_rgb.data, video.width * video.height * 3);
-
-
-		vc_rgb_to_hsv(image, hsv);
+		// Altera a ordem dos pixeis de BGR para RGB
+		vc_bgr_to_rgb(image, rgb);
+		// Converte a imagem RGB para HSV
+		vc_rgb_to_hsv(rgb, hsv);
+		// Segmenta a imagem HSV, obtendo uma imagem binária
 		vc_hsv_segmentation(hsv, temps[1], 15, 35, 50, 100, 28, 100);
-		vc_binary_close(temps[1], temps[3], 3,3);
+		// Aplica operações morfológicas de fecho (dilatação seguida de erosão) para eliminar ruído
+		vc_binary_close(temps[1], temps[2], 3,3);
 
 
 		int nlabels;
-		OVC* blobs = vc_binary_blob_labelling(temps[3], temps[2], &nlabels);
+		// Obtem a lista de blobs (objectos) da imagem binária, com respetiva etiquetagem
+		OVC* blobs = vc_binary_blob_labelling(temps[2], temps[3], &nlabels);
+
 		if (blobs != NULL) {
-			vc_binary_blob_info(temps[2], blobs, nlabels);
-			vc_draw_blobs(temps[3], blobs, nlabels);
+			// Imprime a informação de cada blob
+			vc_binary_blob_info(temps[3], blobs, nlabels);
+			// Desenha os blobs na imagem original
+			vc_draw_blobs(image, blobs, nlabels,
+				0, 0, 255, // cor da caixa delimitadora (bounding box)
+				255, 0, 0, // cor do centro-de-massa
+				3); // thickness = 3
 			free(blobs);
 		}
 
-		vc_gray_to_rgb(temps[3], rgb);
-		memcpy(frame.data, rgb->data, video.width * video.height * 3);
+
+		// Copia os pixeis da imagem IVC para a frame
+		memcpy(frame.data, image->data, video.width * video.height * 3);
 
 
-		// +++++++++++++++++++++++++
 
 		/* Exibe a frame */
 		cv::imshow("VC - VIDEO", frame);
 
-		/* Sai da aplica��o, se o utilizador premir a tecla 'q' */
+		/* Sai da aplicação, se o utilizador premir a tecla 'q' */
 		key = cv::waitKey(1);
 	}
 	vc_image_free(image);
