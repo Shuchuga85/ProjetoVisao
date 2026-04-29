@@ -119,7 +119,7 @@ int main(void) {
 		// Converte a imagem RGB para HSV
 		vc_rgb_to_hsv(rgb, hsv);
 		// Segmenta a imagem HSV, obtendo uma imagem binária
-		vc_hsv_segmentation(hsv, temps[1], 15, 35, 50, 100, 28, 100);
+		vc_hsv_segmentation(hsv, temps[1], 15, 35, 25, 100, 25, 100);
 		// Aplica operações morfológicas de fecho (dilatação seguida de erosão) para eliminar ruído
 		vc_binary_close(temps[1], temps[2], 3,3);
 
@@ -131,11 +131,18 @@ int main(void) {
 		if (blobs != NULL) {
 			// Imprime a informação de cada blob
 			vc_binary_blob_info(temps[3], blobs, nlabels);
+
+			//Filtra os blobs, mantendo apenas aqueles cujo valor da média dos pixeis na imagem binária seja superior a x
+			//OVC* temp_filtered_blobs = vc_blob_filter_area(blobs, &nlabels, 250);
+			OVC* filtered_blobs = vc_blob_filter_mean(filtered_blobs, &nlabels);
+
+
 			// Desenha os blobs na imagem original
-			vc_draw_blobs(image, blobs, nlabels,
+			vc_draw_blobs(image, filtered_blobs, nlabels,
 				0, 0, 255, // cor da caixa delimitadora (bounding box)
 				255, 0, 0, // cor do centro-de-massa
 				3); // thickness = 3
+
 			free(blobs);
 		}
 

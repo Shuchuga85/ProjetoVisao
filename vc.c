@@ -2551,3 +2551,154 @@ int vc_gray_to_rgb(IVC* src, IVC* dst)
 
 	return 1;
 }
+
+OVC* vc_blob_filter_area(OVC* blobs, int* nblobs, int min_area)
+{
+	int i, count = 0;
+
+	if (blobs == NULL || nblobs == NULL || *nblobs <= 0)
+		return NULL;
+
+	// Count valid blobs
+	for (i = 0; i < *nblobs; i++)
+	{
+		if (blobs[i].area >= min_area)
+			count++;
+	}
+
+	if (count == 0)
+	{
+		*nblobs = 0;
+		return NULL;
+	}
+
+	// Allocate new array
+	OVC* filtered = (OVC*)calloc(count, sizeof(OVC));
+	if (filtered == NULL) return NULL;
+
+	// Copy valid blobs
+	int j = 0;
+	for (i = 0; i < *nblobs; i++)
+	{
+		if (blobs[i].area >= min_area)
+		{
+			filtered[j++] = blobs[i];
+		}
+	}
+
+	*nblobs = count;
+	return filtered;
+}
+
+int compare_int(const void* a, const void* b)
+{
+	return (*(int*)a - *(int*)b);
+}
+
+OVC* vc_blob_filter_median(OVC* blobs, int* nblobs)
+{
+	int i, count = 0;
+
+	if (blobs == NULL || nblobs == NULL || *nblobs <= 0)
+		return NULL;
+
+	// ----------- Compute median -----------
+	int* areas = (int*)malloc(sizeof(int) * (*nblobs));
+	if (areas == NULL) return NULL;
+
+	for (i = 0; i < *nblobs; i++)
+		areas[i] = blobs[i].area;
+
+	qsort(areas, *nblobs, sizeof(int), compare_int);
+
+	int median;
+	if (*nblobs % 2 == 0)
+		median = (areas[*nblobs / 2 - 1] + areas[*nblobs / 2]) / 2;
+	else
+		median = areas[*nblobs / 2];
+
+	free(areas);
+
+	// ----------- Count valid blobs -----------
+	for (i = 0; i < *nblobs; i++)
+	{
+		if (blobs[i].area >= median)
+			count++;
+	}
+
+	if (count == 0)
+	{
+		*nblobs = 0;
+		return NULL;
+	}
+
+	// ----------- Allocate filtered array -----------
+	OVC* filtered = (OVC*)calloc(count, sizeof(OVC));
+	if (filtered == NULL) return NULL;
+
+	int j = 0;
+	for (i = 0; i < *nblobs; i++)
+	{
+		if (blobs[i].area >= median)
+		{
+			filtered[j++] = blobs[i];
+		}
+	}
+
+	*nblobs = count;
+	return filtered;
+}
+
+int vc_blob_mean_area(OVC* blobs, int nblobs)
+{
+	if (blobs == NULL || nblobs <= 0) return 0;
+
+	long int sum = 0;
+	int i;
+
+	for (i = 0; i < nblobs; i++)
+	{
+		sum += blobs[i].area;
+	}
+
+	return (int)(sum / nblobs);
+}
+OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs)
+{
+	int i, count = 0;
+
+	if (blobs == NULL || nblobs == NULL || *nblobs <= 0)
+		return NULL;
+
+	// ----------- Compute mean -----------
+	int mean = vc_blob_mean_area(blobs, *nblobs);
+
+	// ----------- Count valid blobs -----------
+	for (i = 0; i < *nblobs; i++)
+	{
+		if (blobs[i].area >= mean)
+			count++;
+	}
+
+	if (count == 0)
+	{
+		*nblobs = 0;
+		return NULL;
+	}
+
+	// ----------- Allocate filtered array -----------
+	OVC* filtered = (OVC*)calloc(count, sizeof(OVC));
+	if (filtered == NULL) return NULL;
+
+	int j = 0;
+	for (i = 0; i < *nblobs; i++)
+	{
+		if (blobs[i].area >= mean)
+		{
+			filtered[j++] = blobs[i];
+		}
+	}
+
+	*nblobs = count;
+	return filtered;
+}

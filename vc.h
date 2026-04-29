@@ -83,5 +83,6 @@ int vc_gray_lowpass_mean_filter(IVC* src, IVC* dst, int kernelsize);
 int vc_gray_lowpass_median_filter(IVC* src, IVC* dst, int kernelsize);
 int vc_gray_lowpass_gaussian_filter(IVC* src, IVC* dst);
 int vc_gray_to_rgb(IVC* src, IVC* dst);
-
-
+OVC* vc_blob_filter_area(OVC* blobs, int* nblobs, int min_area);
+OVC* vc_blob_filter_median(OVC* blobs, int* nblobs);
+OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs);
