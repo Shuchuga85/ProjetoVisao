@@ -1813,7 +1813,6 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 	return blobs;
 }
 
-
 int vc_binary_blob_info(IVC* src, OVC* blobs, int nblobs)
 {
 	unsigned char* data = (unsigned char*)src->data;
@@ -2421,6 +2420,33 @@ int vc_gray_lowpass_gaussian_filter(IVC* src, IVC* dst)
 
 			pos_dst = y * bytesperline + x;
 			datadst[pos_dst] = (unsigned char)(sum / weight_sum);
+		}
+	}
+
+	return 1;
+}
+
+int vc_gray_to_rgb(IVC* src, IVC* dst)
+{
+	unsigned char* datasrc = (unsigned char*)src->data;
+	unsigned char* datadst = (unsigned char*)dst->data;
+
+	int width = src->width;
+	int height = src->height;
+
+	if ((width <= 0) || (height <= 0) || (datasrc == NULL)) return 0;
+	if ((width != dst->width) || (height != dst->height)) return 0;
+	if (src->channels != 1 || dst->channels != 3) return 0;
+
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
+		{
+			unsigned char val = datasrc[y * width + x];
+			int pos_dst = y * dst->bytesperline + x * 3;
+			datadst[pos_dst]     = val;
+			datadst[pos_dst + 1] = val;
+			datadst[pos_dst + 2] = val;
 		}
 	}
 

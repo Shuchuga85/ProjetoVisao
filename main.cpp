@@ -1,235 +1,165 @@
 #include <iostream>
 #include <string>
-#include <cstdlib>
-#include <opencv2/opencv.hpp>
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/videoio.hpp>
+#include <opencv2\opencv.hpp>
+#include <opencv2\core.hpp>
+#include <opencv2\highgui.hpp>
+#include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
+
 
 extern "C" {
 #include "vc.h"
 }
 
-// ------------------------------------------------------------
-// Sample from professor (rename to main to run)
-// ------------------------------------------------------------
-int mainSample(void)
-{
-	char videofile[] = "assets/video.avi";
-	cv::VideoCapture capture;
 
-	struct {
+int main(void) {
+	char videofile[20] = "assets/video.avi";
+	cv::VideoCapture capture;
+	struct
+	{
 		int width, height;
 		int ntotalframes;
 		int fps;
 		int nframe;
 	} video;
-
 	std::string str;
 	int key = 0;
 
+	/* Leitura de v�deo de um ficheiro */
+	/* NOTA IMPORTANTE:
+	O ficheiro video.avi dever� estar localizado no mesmo direct�rio que o ficheiro de c�digo fonte.
+	*/
 	capture.open(videofile);
 
-	if (!capture.isOpened()) {
-		std::cerr << "Erro ao abrir o ficheiro de video!\n";
+	/* Em alternativa, abrir captura de v�deo pela Webcam #0 */
+	//capture.open(0, cv::CAP_DSHOW); // Pode-se utilizar apenas capture.open(0);
+
+	/* Verifica se foi poss�vel abrir o ficheiro de v�deo */
+	if (!capture.isOpened())
+	{
+		std::cerr << "Erro ao abrir o ficheiro de v�deo!\n";
 		return 1;
 	}
 
+	/* N�mero total de frames no v�deo */
 	video.ntotalframes = (int)capture.get(cv::CAP_PROP_FRAME_COUNT);
-	video.fps          = (int)capture.get(cv::CAP_PROP_FPS);
-	video.width        = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
-	video.height       = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
+	/* Frame rate do v�deo */
+	video.fps =(int)capture.get(cv::CAP_PROP_FPS);
+	/* Resolu��o do v�deo */
+	video.width = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
+	video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
 
+	/* Cria uma janela para exibir o v�deo */
 	cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
 
 	cv::Mat frame;
+
+
+	// Imagens IVC
+
+	IVC* hsv;
+	IVC* rgb;
+	enum { templength = 4 };
+	IVC* temps[templength];
+
+
+	hsv = vc_image_new(video.width, video.height, 3, 255);
+	if (hsv == NULL)
+	{
+		printf("ERROR -> vc_image_new():\n\tOut of memory!\n");
+		getchar();
+		return 0;
+	}
+
+	rgb = vc_image_new(video.width, video.height, 3, 255);
+	if (rgb == NULL)
+	{
+		printf("ERROR -> vc_image_new():\n\tOut of memory!\n");
+		getchar();
+		return 0;
+	}
+
+
+	for (int i = 0; i < templength; i++)
+	{
+		temps[i] = vc_image_new(video.width, video.height, 1, 255);
+		if (temps[i] == NULL)
+		{
+			printf("ERROR -> vc_image_new():\n\tOut of memory!\n");
+			getchar();
+			return 0;
+		}
+	}
+
+
+	IVC* image = vc_image_new(video.width, video.height, 3, 255);
+
+
 	while (key != 'q') {
+		/* Leitura de uma frame do v�deo */
 		capture.read(frame);
+
+		/* Verifica se conseguiu ler a frame */
 		if (frame.empty()) break;
 
+		/* N�mero da frame a processar */
 		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
+		/* Exemplo de inser��o texto na frame */
 		str = "RESOLUCAO: " + std::to_string(video.width) + "x" + std::to_string(video.height);
 		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
 		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
 
+		// Fa�a o seu c�digo aqui...
+		/*
+		// Cria uma nova imagem IVC
+		IVC *image = vc_image_new(video.width, video.height, 3, 255);
+		// Copia dados de imagem da estrutura cv::Mat para uma estrutura IVC
+		memcpy(image->data, frame.data, video.width * video.height * 3);
+		// Executa uma fun��o da nossa biblioteca vc
+		vc_rgb_get_green(image);
+		// Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
+		memcpy(frame.data, image->data, video.width * video.height * 3);
+		// Liberta a mem�ria da imagem IVC que havia sido criada
+		vc_image_free(image);
+		*/
+		cv::Mat frame_rgb;
+		cv::cvtColor(frame, frame_rgb, cv::COLOR_BGR2RGB);
+		memcpy(image->data, frame_rgb.data, video.width * video.height * 3);
+
+
+		vc_rgb_to_hsv(image, hsv);
+		vc_hsv_segmentation(hsv, temps[1], 15, 35, 50, 100, 28, 100);
+		vc_binary_close(temps[1], temps[3], 3,3);
+
+
+		int nlabels;
+		OVC* blobs = vc_binary_blob_labelling(temps[3], temps[2], &nlabels);
+		if (blobs != NULL) {
+			vc_binary_blob_info(temps[2], blobs, nlabels);
+			vc_draw_blobs(temps[3], blobs, nlabels);
+			free(blobs);
+		}
+
+		vc_gray_to_rgb(temps[3], rgb);
+		memcpy(frame.data, rgb->data, video.width * video.height * 3);
+
+
+		// +++++++++++++++++++++++++
+
+		/* Exibe a frame */
 		cv::imshow("VC - VIDEO", frame);
+
+		/* Sai da aplica��o, se o utilizador premir a tecla 'q' */
 		key = cv::waitKey(1);
 	}
+	vc_image_free(image);
 
+	/* Fecha a janela */
 	cv::destroyWindow("VC - VIDEO");
+
+	/* Fecha o ficheiro de v�deo */
 	capture.release();
+
 	return 0;
-}
-
-// ------------------------------------------------------------
-// Exercise 1: Motion detection - consecutive frame difference
-// rename to main to run
-// ------------------------------------------------------------
-int mainFrameDiff(void)
-{
-	cv::VideoCapture capture("assets/video.avi");
-	if (!capture.isOpened()) {
-		std::cerr << "Erro ao abrir video!\n";
-		return 1;
-	}
-
-	int w = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
-	int h = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-
-	IVC *src      = vc_image_new(w, h, 3, 255);
-	IVC *gray     = vc_image_new(w, h, 1, 255);
-	IVC *prevGray = vc_image_new(w, h, 1, 255);
-	IVC *diff     = vc_image_new(w, h, 1, 255);
-
-	cv::namedWindow("Frame Diff", cv::WINDOW_AUTOSIZE);
-	cv::Mat frame;
-	cv::Mat display(h, w, CV_8UC1);
-	int key = 0;
-	int n = w * h;
-
-	// seed previous frame
-	capture.read(frame);
-	memcpy(src->data, frame.data, w * h * 3);
-	vc_rgb_to_gray(src, prevGray);
-
-	while (key != 'q') {
-		capture.read(frame);
-		if (frame.empty()) break;
-
-		memcpy(src->data, frame.data, w * h * 3);
-		vc_rgb_to_gray(src, gray);
-
-		// absolute difference + threshold (motion if change > 25)
-		for (int i = 0; i < n; i++) {
-			int d = abs((int)gray->data[i] - (int)prevGray->data[i]);
-			diff->data[i] = (d > 25) ? 255 : 0;
-		}
-
-		memcpy(prevGray->data, gray->data, n);
-		memcpy(display.data, diff->data, n);
-
-		cv::imshow("Frame Diff", display);
-		key = cv::waitKey(1);
-	}
-
-	vc_image_free(src);
-	vc_image_free(gray);
-	vc_image_free(prevGray);
-	vc_image_free(diff);
-	cv::destroyWindow("Frame Diff");
-	capture.release();
-	return 0;
-}
-
-// ------------------------------------------------------------
-// Exercise 2: Background subtraction with fixed background
-// Background updates only when < 1% of pixels change > 16
-// rename to main to run
-// ------------------------------------------------------------
-int mainBgSub(void)
-{
-	cv::VideoCapture capture("assets/video.avi");
-	if (!capture.isOpened()) {
-		std::cerr << "Erro ao abrir video!\n";
-		return 1;
-	}
-
-	int w = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
-	int h = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-
-	// background stored in color: formula uses argmax over R,G,B channels
-	IVC *src        = vc_image_new(w, h, 3, 255);
-	IVC *background = vc_image_new(w, h, 3, 255);
-	IVC *diff       = vc_image_new(w, h, 1, 255);
-
-	cv::namedWindow("BG Subtraction", cv::WINDOW_AUTOSIZE);
-	cv::Mat frame;
-	cv::Mat display(h, w, CV_8UC1);
-	int key = 0;
-	int n = w * h;
-	int motionLimit = (int)(n * 0.01); // 1% of total pixels
-
-	// initialise background with first frame
-	capture.read(frame);
-	memcpy(src->data, frame.data, w * h * 3);
-	memcpy(background->data, src->data, w * h * 3);
-
-	while (key != 'q') {
-		capture.read(frame);
-		if (frame.empty()) break;
-
-		memcpy(src->data, frame.data, w * h * 3);
-
-		// M(x) = 1 if argmax_{R,G,B} |I(x) - B(x)| > T  (slide formula)
-		int motionPixels = 0;
-		for (int i = 0; i < n; i++) {
-			int pos = i * 3;
-			int d0 = abs((int)src->data[pos]     - (int)background->data[pos]);
-			int d1 = abs((int)src->data[pos + 1] - (int)background->data[pos + 1]);
-			int d2 = abs((int)src->data[pos + 2] - (int)background->data[pos + 2]);
-			int dmax = d0 > d1 ? (d0 > d2 ? d0 : d2) : (d1 > d2 ? d1 : d2);
-			diff->data[i] = (dmax > 16) ? 255 : 0;
-			if (dmax > 16) motionPixels++;
-		}
-
-		// no movement: update background
-		if (motionPixels < motionLimit)
-			memcpy(background->data, src->data, w * h * 3);
-
-		memcpy(display.data, diff->data, n);
-
-		cv::imshow("BG Subtraction", display);
-		key = cv::waitKey(1);
-	}
-
-	vc_image_free(src);
-	vc_image_free(background);
-	vc_image_free(diff);
-	cv::destroyWindow("BG Subtraction");
-	capture.release();
-	return 0;
-}
-
-// ------------------------------------------------------------
-// Exercise 3: Background subtraction with MOG2
-// rename to main to run
-// ------------------------------------------------------------
-int mainMOG2(void)
-{
-	cv::VideoCapture capture("assets/video.avi");
-	if (!capture.isOpened()) {
-		std::cerr << "Erro ao abrir video!\n";
-		return 1;
-	}
-
-	cv::namedWindow("MOG2", cv::WINDOW_AUTOSIZE);
-
-	cv::Ptr<cv::BackgroundSubtractor> pMOG2 = cv::createBackgroundSubtractorMOG2();
-
-	cv::Mat frame, fgMask;
-	int key = 0;
-
-	while (key != 'q') {
-		capture.read(frame);
-		if (frame.empty()) break;
-
-		pMOG2->apply(frame, fgMask);
-
-		cv::imshow("MOG2", fgMask);
-		key = cv::waitKey(1);
-	}
-
-	cv::destroyWindow("MOG2");
-	capture.release();
-	return 0;
-}
-
-// ------------------------------------------------------------
-// Active entry point — rename whichever exercise you want to run
-// ------------------------------------------------------------
-int main(void)
-{
-	return mainMOG2();
 }
