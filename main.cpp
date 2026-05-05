@@ -150,9 +150,12 @@ int main(void) {
 		// Texto por laranja: classificacao EEC 379/71
 		if (filtered_blobs != NULL) {
 			for (int j = 0; j < nlabels; j++) {
+				//int tx = filtered_blobs[j].x;
+				//int ty = filtered_blobs[j].y - 8;
+				//if (ty < 40) ty = filtered_blobs[j].y + filtered_blobs[j].height + 20;
+				
 				int tx = filtered_blobs[j].x;
-				int ty = filtered_blobs[j].y - 8;
-				if (ty < 40) ty = filtered_blobs[j].y + filtered_blobs[j].height + 20;
+				int ty = filtered_blobs[j].y + filtered_blobs[j].height + 15;
 
 				char buf1[128], buf2[128];
 				snprintf(buf1, sizeof(buf1), "L:%d A:%d P:%d",
