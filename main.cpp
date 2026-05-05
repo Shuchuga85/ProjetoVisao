@@ -23,6 +23,7 @@ int main(void) {
 		int nframe;
 	} video;
 	std::string str;
+	std::string str1;
 	int key = 0;
 
 	/* Leitura de v�deo de um ficheiro */
@@ -96,7 +97,7 @@ int main(void) {
 
 
 	while (key != 'q') {
-		/* Leitura de uma frame do v�deo */
+		/* Leitura de uma frame do vídeo */
 		capture.read(frame);
 
 		/* Verifica se conseguiu ler a frame */
@@ -105,52 +106,73 @@ int main(void) {
 		/* Número da frame a processar */
 		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
-		// Adicionar texto com ao vídeo
-		str = "RESOLUCAO: " + std::to_string(video.width) + "x" + std::to_string(video.height);
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 0, 0), 1);
-
-		// Faça o seu código aqui...
-		
 		// Copia pixeis do frame para a imagem IVC
 		memcpy(image->data, frame.data, video.width * video.height * 3);
 		// Altera a ordem dos pixeis de BGR para RGB
 		vc_bgr_to_rgb(image, rgb);
 		// Converte a imagem RGB para HSV
 		vc_rgb_to_hsv(rgb, hsv);
-		// Segmenta a imagem HSV, obtendo uma imagem binária
-		vc_hsv_segmentation(hsv, temps[1], 15, 35, 25, 100, 25, 100);
-		// Aplica operações morfológicas de fecho (dilatação seguida de erosão) para eliminar ruído
-		vc_binary_close(temps[1], temps[2], 3,3);
+		// Segmenta a imagem HSV para a cor laranja
+		vc_hsv_segmentation(hsv, temps[1], 15, 35, 33, 100, 25, 100);
+		// Fecho morfologico para eliminar ruido
+		vc_binary_close(temps[1], temps[2], 3, 3);
 
-
-		int nlabels;
-		// Obtem a lista de blobs (objectos) da imagem binária, com respetiva etiquetagem
+		int nlabels = 0;
 		OVC* blobs = vc_binary_blob_labelling(temps[2], temps[3], &nlabels);
+		OVC* filtered_blobs = NULL;
 
 		if (blobs != NULL) {
-			// Imprime a informação de cada blob
 			vc_binary_blob_info(temps[3], blobs, nlabels);
 
-			//Filtra os blobs, mantendo apenas aqueles cujo valor da média dos pixeis na imagem binária seja superior a x
-			//OVC* temp_filtered_blobs = vc_blob_filter_area(blobs, &nlabels, 250);
-			OVC* filtered_blobs = vc_blob_filter_mean(filtered_blobs, &nlabels);
-
-
-			// Desenha os blobs na imagem original
-			vc_draw_blobs(image, filtered_blobs, nlabels,
-				0, 0, 255, // cor da caixa delimitadora (bounding box)
-				255, 0, 0, // cor do centro-de-massa
-				3); // thickness = 3
-
+			filtered_blobs = vc_blob_filter_area(blobs, &nlabels, 90000);
 			free(blobs);
+			blobs = NULL;
+
+			if (filtered_blobs != NULL) {
+				// Classifica cada laranja: calibre, deformacao, categoria EEC 379/71
+				vc_orange_classify(filtered_blobs, nlabels);
+
+				// Desenha bounding boxes (azul) e centroide (vermelho) na imagem IVC
+				vc_draw_blobs(image, filtered_blobs, nlabels,
+					0, 0, 255,   // bounding box
+					255, 0, 0,   // centroide
+					3);
+			}
 		}
 
-
-		// Copia os pixeis da imagem IVC para a frame
+		// Copia imagem IVC (com bounding boxes) de volta para o frame OpenCV
 		memcpy(frame.data, image->data, video.width * video.height * 3);
 
+		// Texto global: contagem de laranjas
+		str1 = "Laranjas: " + std::to_string(nlabels);
+		cv::putText(frame, str1, cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 255), 2);
 
+		// Texto por laranja: classificacao EEC 379/71
+		if (filtered_blobs != NULL) {
+			for (int j = 0; j < nlabels; j++) {
+				int tx = filtered_blobs[j].x;
+				int ty = filtered_blobs[j].y - 8;
+				if (ty < 40) ty = filtered_blobs[j].y + filtered_blobs[j].height + 20;
+
+				char buf1[128], buf2[128];
+				snprintf(buf1, sizeof(buf1), "L:%d A:%d P:%d",
+					filtered_blobs[j].label,
+					filtered_blobs[j].area,
+					filtered_blobs[j].perimeter);
+				snprintf(buf2, sizeof(buf2), "CAL:%d D:%.0fmm DEF:%.1f%% CAT:%s",
+					filtered_blobs[j].calibre,
+					(double)filtered_blobs[j].diameter_mm,
+					(double)filtered_blobs[j].deformation,
+					vc_orange_category_name(filtered_blobs[j].category));
+
+				cv::putText(frame, buf1, cv::Point(tx, ty),
+					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 1);
+				cv::putText(frame, buf2, cv::Point(tx, ty + 18),
+					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 1);
+			}
+			free(filtered_blobs);
+			filtered_blobs = NULL;
+		}
 
 		/* Exibe a frame */
 		cv::imshow("VC - VIDEO", frame);

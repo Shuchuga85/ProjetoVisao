@@ -34,6 +34,11 @@ typedef struct {
 	int xc, yc;					// Centro-de-massa
 	int perimeter;				// Per�metro
 	int label;					// Etiqueta
+	// Classificacao EEC 379/71 (preenchida por vc_orange_classify)
+	float diameter_mm;			// Diametro equivalente em mm (calculado da bounding box)
+	int calibre;				// Calibre EEC 0..13; -1 se abaixo do minimo (53 mm)
+	float deformation;			// Deformacao (%) em relacao ao circulo ideal
+	int category;				// 0=Extra 1=I 2=II 3=III; -1=nao classificado
 } OVC;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -86,3 +91,5 @@ int vc_gray_to_rgb(IVC* src, IVC* dst);
 OVC* vc_blob_filter_area(OVC* blobs, int* nblobs, int min_area);
 OVC* vc_blob_filter_median(OVC* blobs, int* nblobs);
 OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs);
+int vc_orange_classify(OVC* blobs, int nblobs);
+const char* vc_orange_category_name(int category);

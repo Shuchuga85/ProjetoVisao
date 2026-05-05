@@ -2702,3 +2702,104 @@ OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs)
 	*nblobs = count;
 	return filtered;
 }
+
+// ---------------------------------------------------------------------------
+// Orange classification - EEC Regulation 379/71
+// Calibration: 280 pixels = 55 mm (from assignment specification)
+// ---------------------------------------------------------------------------
+
+// EEC orange size table [calibre 0..13]: {min_mm, max_mm}
+static const int vc_orange_size_table[14][2] = {
+	{100, 999}, /* 0  */
+	{ 87, 100}, /* 1  */
+	{ 84,  96}, /* 2  */
+	{ 81,  92}, /* 3  */
+	{ 77,  88}, /* 4  */
+	{ 73,  84}, /* 5  */
+	{ 70,  80}, /* 6  */
+	{ 67,  76}, /* 7  */
+	{ 64,  73}, /* 8  */
+	{ 62,  70}, /* 9  */
+	{ 60,  68}, /* 10 */
+	{ 58,  66}, /* 11 */
+	{ 56,  63}, /* 12 */
+	{ 53,  60}, /* 13 */
+};
+
+// Deformation thresholds (%) for quality category assignment.
+// Based on: deform = |blob_area - ideal_circle_area| / ideal_circle_area * 100
+// where ideal_circle_area = pi * (max(width,height)/2)^2
+#define VC_DEFORM_EXTRA  0.35f
+#define VC_DEFORM_I      0.65f
+#define VC_DEFORM_II     1.00f
+
+int vc_orange_classify(OVC* blobs, int nblobs)
+{
+	int i, c;
+	const float px_to_mm = 55.0f / 280.0f;
+	const float pi = 3.14159265f;
+
+	if (blobs == NULL || nblobs <= 0) return 0;
+
+	for (i = 0; i < nblobs; i++)
+	{
+		// ---- Diameter & Calibre ----
+		float diam_px = (blobs[i].width + blobs[i].height) / 2.0f;
+		blobs[i].diameter_mm = diam_px * px_to_mm;
+
+		// Assign calibre by finding the range whose centre is closest to the
+		// measured diameter. Requires the diameter to actually fall inside the range.
+		blobs[i].calibre = -1;
+		float best_dist = 1e9f;
+		for (c = 0; c < 14; c++)
+		{
+			float lo = (float)vc_orange_size_table[c][0];
+			float hi = (float)vc_orange_size_table[c][1];
+			if (blobs[i].diameter_mm < lo || blobs[i].diameter_mm > hi)
+				continue;
+			float centre = (lo + hi) / 2.0f;
+			float dist = blobs[i].diameter_mm - centre;
+			if (dist < 0.0f) dist = -dist;
+			if (dist < best_dist)
+			{
+				best_dist = dist;
+				blobs[i].calibre = c;
+			}
+		}
+
+		// ---- Shape deformation ----
+		// Compares the blob's actual area to the area of an ideal circle whose
+		// diameter equals the longest bounding-box dimension.
+		float max_dim = (blobs[i].width > blobs[i].height)
+			? (float)blobs[i].width : (float)blobs[i].height;
+		float ideal_area = pi * (max_dim / 2.0f) * (max_dim / 2.0f);
+		float diff = (float)blobs[i].area - ideal_area;
+		if (diff < 0.0f) diff = -diff;
+		blobs[i].deformation = (ideal_area > 0.0f)
+			? (diff / ideal_area * 100.0f) : 0.0f;
+
+		// ---- Quality Category (EEC 379/71 Section II.D) ----
+		if (blobs[i].deformation < VC_DEFORM_EXTRA)
+			blobs[i].category = 0; // Extra
+		else if (blobs[i].deformation < VC_DEFORM_I)
+			blobs[i].category = 1; // Class I
+		else if (blobs[i].deformation < VC_DEFORM_II)
+			blobs[i].category = 2; // Class II
+		else
+			blobs[i].category = 3; // Class III
+	}
+
+	return 1;
+}
+
+const char* vc_orange_category_name(int category)
+{
+	switch (category)
+	{
+	case 0:  return "Extra";
+	case 1:  return "I";
+	case 2:  return "II";
+	case 3:  return "III";
+	default: return "N/A";
+	}
+}
