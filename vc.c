@@ -2798,3 +2798,55 @@ const char* vc_orange_category_name(int category)
 	default: return "N/A";
 	}
 }
+
+
+// Conta laranjas novas comparando centroidos da frame atual com a frame anterior.
+// Uma laranja e considerada nova se nao existir nenhum blob na frame anterior
+// cujo centroide esteja a menos de 'distancia_max' pixels.
+// prev_xc e prev_yc: arrays com os centroidos da frame anterior (tamanho MAX_BLOBS)
+// prev_count: numero de blobs na frame anterior
+// total: contador acumulado total (so cresce)
+#define VC_MAX_BLOBS 64
+#define VC_DIST_MAX  80
+
+int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total)
+{
+	int i, j, nova;
+	int dx, dy;
+
+	if (blobs == NULL || prev_xc == NULL || prev_yc == NULL || prev_count == NULL || total == NULL)
+		return 0;
+
+	// Para cada blob da frame atual, verifica se e novo (nao existia na frame anterior)
+	for (i = 0; i < nlabels; i++)
+	{
+		nova = 1; // assume que e nova
+
+		for (j = 0; j < *prev_count; j++)
+		{
+			dx = blobs[i].xc - prev_xc[j];
+			dy = blobs[i].yc - prev_yc[j];
+
+			// Se existir um blob proximo na frame anterior, nao e nova
+			if ((dx * dx + dy * dy) < (VC_DIST_MAX * VC_DIST_MAX))
+			{
+				nova = 0;
+				break;
+			}
+		}
+
+		if (nova)
+			(*total)++;
+	}
+
+	// Atualiza os centroidos da frame anterior para a proxima chamada
+	*prev_count = nlabels;
+	if (nlabels > VC_MAX_BLOBS) nlabels = VC_MAX_BLOBS;
+	for (i = 0; i < nlabels; i++)
+	{
+		prev_xc[i] = blobs[i].xc;
+		prev_yc[i] = blobs[i].yc;
+	}
+
+	return 1;
+}

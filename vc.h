@@ -93,3 +93,4 @@ OVC* vc_blob_filter_median(OVC* blobs, int* nblobs);
 OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs);
 int vc_orange_classify(OVC* blobs, int nblobs);
 const char* vc_orange_category_name(int category);
+int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total);

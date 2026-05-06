@@ -45,7 +45,7 @@ int main(void) {
 	/* N�mero total de frames no v�deo */
 	video.ntotalframes = (int)capture.get(cv::CAP_PROP_FRAME_COUNT);
 	/* Frame rate do v�deo */
-	video.fps =(int)capture.get(cv::CAP_PROP_FPS);
+	video.fps = (int)capture.get(cv::CAP_PROP_FPS);
 	/* Resolu��o do v�deo */
 	video.width = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
 	video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
@@ -95,6 +95,11 @@ int main(void) {
 
 	IVC* image = vc_image_new(video.width, video.height, 3, 255);
 
+	// Variaveis para contagem total de laranjas
+	int total_laranjas = 0;
+	int prev_xc[64] = { 0 };
+	int prev_yc[64] = { 0 };
+	int prev_count = 0;
 
 	while (key != 'q') {
 		/* Leitura de uma frame do vídeo */
@@ -140,12 +145,22 @@ int main(void) {
 			}
 		}
 
+		// Conta laranjas novas nesta frame e acumula no total
+		if (filtered_blobs != NULL)
+			vc_count_new_oranges(filtered_blobs, nlabels, prev_xc, prev_yc, &prev_count, &total_laranjas);
+		else
+			vc_count_new_oranges(NULL, 0, prev_xc, prev_yc, &prev_count, &total_laranjas);
+
 		// Copia imagem IVC (com bounding boxes) de volta para o frame OpenCV
 		memcpy(frame.data, image->data, video.width * video.height * 3);
 
-		// Texto global: contagem de laranjas
-		str1 = "Laranjas: " + std::to_string(nlabels);
+		// Texto: numero de laranjas na frame atual
+		str1 = "Laranjas frame: " + std::to_string(nlabels);
 		cv::putText(frame, str1, cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 255), 2);
+
+		// Texto: total acumulado de laranjas desde o inicio do video
+		str1 = "Total: " + std::to_string(total_laranjas);
+		cv::putText(frame, str1, cv::Point(20, 65), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
 
 		// Texto por laranja: classificacao EEC 379/71
 		if (filtered_blobs != NULL) {
@@ -153,7 +168,7 @@ int main(void) {
 				//int tx = filtered_blobs[j].x;
 				//int ty = filtered_blobs[j].y - 8;
 				//if (ty < 40) ty = filtered_blobs[j].y + filtered_blobs[j].height + 20;
-				
+
 				int tx = filtered_blobs[j].x;
 				int ty = filtered_blobs[j].y + filtered_blobs[j].height + 15;
 
