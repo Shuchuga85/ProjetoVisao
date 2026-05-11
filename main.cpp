@@ -5,8 +5,12 @@
 #include <opencv2\highgui.hpp>
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
-#define DEBUG 1
-
+#define DEBUG 0
+// 0 = Original RGB with bounding boxes
+// 1 = Orange segmentation (temps[2], after morphological close)
+// 2 = Masked grayscale (orange area only)
+// 3 = Dark spot binary (spot_binary)
+// 5 = Orange segmentation minus detected dark spots (temps[2] - spot_binary)
 
 extern "C" {
 #include "vc.h"
@@ -24,7 +28,7 @@ int main(void) {
 	} video;
 	std::string str;
 	std::string str1;
-	int key = 0;
+	char key = 0;
 
 	/* Leitura de v�deo de um ficheiro */
 	/* NOTA IMPORTANTE:
@@ -94,13 +98,40 @@ int main(void) {
 
 	IVC* image = vc_image_new(video.width, video.height, 3, 255);
 
+	IVC* gray = vc_image_new(video.width, video.height, 1, 255);
+	if (gray == NULL)
+	{
+		printf("ERROR -> vc_image_new():\n\tOut of memory!\n");
+		getchar();
+		return 0;
+	}
+
+	IVC* masked_gray = vc_image_new(video.width, video.height, 1, 255);
+	if (masked_gray == NULL)
+	{
+		printf("ERROR -> vc_image_new():\n\tOut of memory!\n");
+		getchar();
+		return 0;
+	}
+
+	IVC* spot_binary = vc_image_new(video.width, video.height, 1, 255);
+	if (spot_binary == NULL)
+	{
+		printf("ERROR -> vc_image_new():\n\tOut of memory!\n");
+		getchar();
+		return 0;
+	}
+
 	// Variaveis para contagem total de laranjas
 	int total_laranjas = 0;
 	int prev_xc[64] = { 0 };
 	int prev_yc[64] = { 0 };
 	int prev_count = 0;
+	bool paused = false;
 
 	while (key != 'q') {
+		if (!paused)
+		{
 		/* Leitura de uma frame do vídeo */
 		capture.read(frame);
 
@@ -124,6 +155,10 @@ int main(void) {
 
 		//vc_binary_dilate(temps[1], temps[2], 3);
 
+		// Detecao de manchas escuras
+		vc_rgb_to_gray(rgb, gray);
+		vc_mask_crop(gray, temps[2], masked_gray);
+		vc_gray_dark_spot_detect_mode(masked_gray, spot_binary, VC_SPOT_MARGIN);
 
 		int nlabels = 0;
 		OVC* blobs = vc_binary_blob_labelling(temps[2], temps[3], &nlabels);
@@ -137,6 +172,9 @@ int main(void) {
 			blobs = NULL;
 
 			if (filtered_blobs != NULL) {
+				// Conta manchas escuras por laranja
+				vc_blob_count_dark_spots(spot_binary, temps[3], filtered_blobs, nlabels);
+
 				// Classifica cada laranja: calibre, deformacao, categoria EEC 379/71
 				vc_orange_classify(filtered_blobs, nlabels);
 
@@ -148,8 +186,8 @@ int main(void) {
 
 				// Desenha bounding boxes (azul) e centroide (vermelho) na segmentação binária (para debug)
 				vc_draw_blobs(temps[2], filtered_blobs, nlabels,
-					0, 0, 255,   // bounding box
-					255, 0, 0,   // centroide
+					255, 255, 255,   // bounding box
+					0, 0, 0,   // centroide
 					3);
 			}
 		}
@@ -160,16 +198,36 @@ int main(void) {
 		else
 			vc_count_new_oranges(NULL, 0, prev_xc, prev_yc, &prev_count, &total_laranjas);
 
-		if (DEBUG == 1)
-		{
-			// Copia segmentação IVC (com bounding boxes) de volta para o frame OpenCV
-			vc_gray_to_rgb(temps[2], rgb);
-			memcpy(frame.data, rgb->data, video.width * video.height * 3);
-		}
-		else
+		if (DEBUG == 0)
 		{
 			// Copia imagem IVC (com bounding boxes) de volta para o frame OpenCV
 			memcpy(frame.data, image->data, video.width * video.height * 3);
+			
+		}
+		else
+		{
+			memcpy(rgb->data, image->data, video.width * video.height * 3);
+			switch(DEBUG)
+			{
+				case 1:
+					// Copia imagem IVC da segmentação binária para o frame OpenCV
+					vc_gray_to_rgb(temps[2], rgb);
+					break;
+				case 2:
+					// Copia imagem IVC do grayscale mascarado para o frame OpenCV
+					vc_gray_to_rgb(masked_gray, rgb);
+					break;
+				case 3:
+					// Copia imagem IVC da detecção de manchas escuras para o frame OpenCV
+					vc_gray_to_rgb(spot_binary, rgb);
+					break;
+				case 5:
+					// Segmentação laranja com manchas escuras subtraídas (temps[2] - spot_binary)
+					vc_binary_subtract(temps[2], spot_binary, temps[0]);
+					vc_gray_to_rgb(temps[0], rgb);
+					break;
+			}
+			memcpy(frame.data, rgb->data, video.width* video.height * 3);
 		}
 
 
@@ -196,10 +254,11 @@ int main(void) {
 					filtered_blobs[j].label,
 					filtered_blobs[j].area,
 					filtered_blobs[j].perimeter);
-				snprintf(buf2, sizeof(buf2), "CAL:%d D:%.0fmm DEF:%.1f%% CAT:%s",
+				snprintf(buf2, sizeof(buf2), "CAL:%d D:%.0fmm DEF:%.1f%% SPOT:%.1f%% CAT:%s",
 					filtered_blobs[j].calibre,
 					(double)filtered_blobs[j].diameter_mm,
 					(double)filtered_blobs[j].deformation,
+					(double)filtered_blobs[j].spot_ratio,
 					vc_orange_category_name(filtered_blobs[j].category));
 
 				cv::putText(frame, buf1, cv::Point(tx, ty),
@@ -211,13 +270,24 @@ int main(void) {
 			filtered_blobs = NULL;
 		}
 
-		/* Exibe a frame */
+		// Show frame
 		cv::imshow("VC - VIDEO", frame);
+	}
+		/* Exibe a frame */
+		//cv::imshow("VC - VIDEO", frame);
 
 		/* Sai da aplicação, se o utilizador premir a tecla 'q' */
-		key = cv::waitKey(1);
+		key = cv::waitKey(30);
+		// Toggle pause with 'p'
+		if (key == 'p')
+		{
+			paused = !paused;
+		}
 	}
 	vc_image_free(image);
+	vc_image_free(gray);
+	vc_image_free(masked_gray);
+	vc_image_free(spot_binary);
 
 	/* Fecha a janela */
 	cv::destroyWindow("VC - VIDEO");

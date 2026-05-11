@@ -10,7 +10,6 @@ set(OPENCV_LIB_DIR "C:/opencv/build/x64/vc16/lib")
 add_executable(MyApp
     main.cpp
     vc.c
-    pc.c
 )
 
 target_include_directories(MyApp PRIVATE ${OPENCV_INCLUDE})

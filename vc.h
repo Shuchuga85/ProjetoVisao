@@ -39,7 +39,23 @@ typedef struct {
 	int calibre;				// Calibre EEC 0..13; -1 se abaixo do minimo (53 mm)
 	float deformation;			// Deformacao (%) em relacao ao circulo ideal
 	int category;				// 0=Extra 1=I 2=II 3=III; -1=nao classificado
+	int   dark_spot_area;
+	float spot_ratio;
 } OVC;
+
+/* Dark spot detection tuning */
+#define VC_SPOT_KERNEL  11
+#define VC_SPOT_CMIN    30
+
+/* Dark spot classification thresholds (% of orange surface, EEC 379/71 II.D) */
+#define VC_SPOT_EXTRA   0.5f
+#define VC_SPOT_I       2.0f
+#define VC_SPOT_II      5.0f
+
+/* Dark spot detection: histogram-mode approach.
+   Pixels whose gray value falls more than VC_SPOT_MARGIN below the dominant
+   orange-surface gray level (histogram mode) are marked as dark spots. */
+#define VC_SPOT_MARGIN  25
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //                    PROT�TIPOS DE FUN��ES
@@ -73,6 +89,8 @@ int vc_binary_dilate(IVC* src, IVC* dst, int kernel);
 int vc_binary_erode(IVC* src, IVC* dst, int kernel);
 int vc_binary_open(IVC* src, IVC* dst, int erode_kernel, int dilate_kernel);
 int vc_binary_close(IVC* src, IVC* dst, int dilate_kernel, int erode_kernel);
+int vc_binary_dilate_fast(IVC* src, IVC* dst, int kernel);
+int vc_binary_erode_fast(IVC* src, IVC* dst, int kernel);
 int vc_mask_crop(IVC* src, IVC* mask, IVC* dst);
 //int vc_binary_blob_labelling(IVC* src, IVC* dst);
 OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels);
@@ -94,3 +112,7 @@ OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs);
 int vc_orange_classify(OVC* blobs, int nblobs);
 const char* vc_orange_category_name(int category);
 int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total);
+int vc_gray_dark_spot_detect(IVC* masked_gray, IVC* dst, int kernel, int cmin);
+int vc_gray_dark_spot_detect_mode(IVC* masked_gray, IVC* dst, int margin);
+int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int nblobs);
+int vc_binary_subtract(IVC* src, IVC* subtrahend, IVC* dst);
