@@ -5,12 +5,12 @@
 #include <opencv2\highgui.hpp>
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
+#define DEBUG 1
 
 
 extern "C" {
 #include "vc.h"
 }
-
 
 int main(void) {
 	char videofile[20] = "assets/video.avi";
@@ -38,7 +38,7 @@ int main(void) {
 	/* Verifica se foi poss�vel abrir o ficheiro de v�deo */
 	if (!capture.isOpened())
 	{
-		std::cerr << "Erro ao abrir o ficheiro de v�deo!\n";
+		std::cerr << "Erro ao abrir o ficheiro de video!\n";
 		return 1;
 	}
 
@@ -54,7 +54,6 @@ int main(void) {
 	cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
 
 	cv::Mat frame;
-
 
 	// Imagens IVC
 
@@ -119,8 +118,12 @@ int main(void) {
 		vc_rgb_to_hsv(rgb, hsv);
 		// Segmenta a imagem HSV para a cor laranja
 		vc_hsv_segmentation(hsv, temps[1], 15, 35, 33, 100, 25, 100);
+
 		// Fecho morfologico para eliminar ruido
 		vc_binary_close(temps[1], temps[2], 3, 3);
+
+		//vc_binary_dilate(temps[1], temps[2], 3);
+
 
 		int nlabels = 0;
 		OVC* blobs = vc_binary_blob_labelling(temps[2], temps[3], &nlabels);
@@ -142,6 +145,12 @@ int main(void) {
 					0, 0, 255,   // bounding box
 					255, 0, 0,   // centroide
 					3);
+
+				// Desenha bounding boxes (azul) e centroide (vermelho) na segmentação binária (para debug)
+				vc_draw_blobs(temps[2], filtered_blobs, nlabels,
+					0, 0, 255,   // bounding box
+					255, 0, 0,   // centroide
+					3);
 			}
 		}
 
@@ -151,8 +160,18 @@ int main(void) {
 		else
 			vc_count_new_oranges(NULL, 0, prev_xc, prev_yc, &prev_count, &total_laranjas);
 
-		// Copia imagem IVC (com bounding boxes) de volta para o frame OpenCV
-		memcpy(frame.data, image->data, video.width * video.height * 3);
+		if (DEBUG == 1)
+		{
+			// Copia segmentação IVC (com bounding boxes) de volta para o frame OpenCV
+			vc_gray_to_rgb(temps[2], rgb);
+			memcpy(frame.data, rgb->data, video.width * video.height * 3);
+		}
+		else
+		{
+			// Copia imagem IVC (com bounding boxes) de volta para o frame OpenCV
+			memcpy(frame.data, image->data, video.width * video.height * 3);
+		}
+
 
 		// Texto: numero de laranjas na frame atual
 		str1 = "Laranjas frame: " + std::to_string(nlabels);
@@ -173,7 +192,7 @@ int main(void) {
 				int ty = filtered_blobs[j].y + filtered_blobs[j].height + 15;
 
 				char buf1[128], buf2[128];
-				snprintf(buf1, sizeof(buf1), "L:%d A:%d P:%d",
+				snprintf(buf1, sizeof(buf1), "L:%d Área:%d Perímetro:%d",
 					filtered_blobs[j].label,
 					filtered_blobs[j].area,
 					filtered_blobs[j].perimeter);
