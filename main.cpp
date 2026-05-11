@@ -158,7 +158,7 @@ int main(void) {
 		// Detecao de manchas escuras
 		vc_rgb_to_gray(rgb, gray);
 		vc_mask_crop(gray, temps[2], masked_gray);
-		vc_gray_dark_spot_detect_mode(masked_gray, spot_binary, VC_SPOT_MARGIN);
+		vc_gray_local_mean_detect(masked_gray, spot_binary, VC_SPOT_KERNEL_LOCAL, VC_SPOT_THRESHOLD);
 
 		int nlabels = 0;
 		OVC* blobs = vc_binary_blob_labelling(temps[2], temps[3], &nlabels);
@@ -250,7 +250,7 @@ int main(void) {
 				int ty = filtered_blobs[j].y + filtered_blobs[j].height + 15;
 
 				char buf1[128], buf2[128];
-				snprintf(buf1, sizeof(buf1), "L:%d Área:%d Perímetro:%d",
+				snprintf(buf1, sizeof(buf1), "L:%d Area:%d PerImetro:%d",
 					filtered_blobs[j].label,
 					filtered_blobs[j].area,
 					filtered_blobs[j].perimeter);
@@ -262,9 +262,9 @@ int main(void) {
 					vc_orange_category_name(filtered_blobs[j].category));
 
 				cv::putText(frame, buf1, cv::Point(tx, ty),
-					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 1);
+					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 2);
 				cv::putText(frame, buf2, cv::Point(tx, ty + 18),
-					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 1);
+					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 2);
 			}
 			free(filtered_blobs);
 			filtered_blobs = NULL;

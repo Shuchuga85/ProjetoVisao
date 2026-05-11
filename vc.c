@@ -2778,9 +2778,10 @@ static const int vc_orange_size_table[14][2] = {
 // Deformation thresholds (%) for quality category assignment.
 // Based on: deform = |blob_area - ideal_circle_area| / ideal_circle_area * 100
 // where ideal_circle_area = pi * (max(width,height)/2)^2
-#define VC_DEFORM_EXTRA  0.35f
-#define VC_DEFORM_I      0.65f
-#define VC_DEFORM_II     1.00f
+// Calibrated to the formula output: normal oranges in video show DEF ~4-8%.
+#define VC_DEFORM_EXTRA  5.0f
+#define VC_DEFORM_I      10.0f
+#define VC_DEFORM_II     20.0f
 
 int vc_orange_classify(OVC* blobs, int nblobs)
 {
@@ -3088,6 +3089,117 @@ int vc_gray_dark_spot_detect_mode(IVC* masked_gray, IVC* dst, int margin)
 				datadst[pos] = 0;
 		}
 	}
+	return 1;
+}
+
+/* Detect dark spots via local mean subtraction using a 2D integral image.
+ *
+ * For each non-zero pixel p inside the orange mask:
+ *   background = mean of non-zero pixels in the (kernel x kernel) window
+ *   residual   = background - src[p]
+ *   dst[p]     = (residual > threshold) ? 255 : 0
+ *
+ * Large smooth shadows have a similar value to their neighborhood mean, so
+ * residual ≈ 0 and they are suppressed.  Compact dark spots are much darker
+ * than the local mean, producing a large positive residual that survives the
+ * threshold.
+ *
+ * Uses two summed-area tables (integral images) for sum and count of non-zero
+ * pixels so the per-pixel query is O(1) and the total cost is O(W*H)
+ * regardless of kernel size.  Memory: two int[W*H] heap arrays (~7 MB for
+ * 1280x720), freed before returning. */
+int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int threshold)
+{
+	unsigned char* datasrc;
+	unsigned char* datadst;
+	int  width, height, bpl;
+	int  x, y, k;
+	long int pos;
+	int* isum;   /* integral image: sum  of non-zero pixel values */
+	int* icnt;   /* integral image: count of non-zero pixels      */
+
+	if (masked_gray == NULL || dst == NULL) return 0;
+
+	datasrc = masked_gray->data;
+	datadst = dst->data;
+	width   = masked_gray->width;
+	height  = masked_gray->height;
+	bpl     = masked_gray->bytesperline;
+
+	if (datasrc == NULL || datadst == NULL) return 0;
+	if (width <= 0 || height <= 0) return 0;
+	if (width != dst->width || height != dst->height) return 0;
+	if (masked_gray->channels != 1 || dst->channels != 1) return 0;
+
+	k = kernel / 2;
+
+	isum = (int*)calloc((size_t)width * height, sizeof(int));
+	icnt = (int*)calloc((size_t)width * height, sizeof(int));
+	if (isum == NULL || icnt == NULL) { free(isum); free(icnt); return 0; }
+
+	/* Build 2D summed-area tables.
+	 * isum[y,x] = sum  of src values  for all (r<=y, c<=x) where src > 0
+	 * icnt[y,x] = count of src pixels for all (r<=y, c<=x) where src > 0 */
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			int idx  = y * width + x;
+			int above = (y > 0) ? (y - 1) * width + x : -1;
+			int left  = (x > 0) ? y * width + (x - 1) : -1;
+			int diag  = (x > 0 && y > 0) ? (y - 1) * width + (x - 1) : -1;
+			int v     = datasrc[(long int)y * bpl + x];
+			int val   = (v > 0) ? v : 0;
+			int cnt   = (v > 0) ? 1 : 0;
+
+			isum[idx] = val
+				+ (left  >= 0 ? isum[left]  : 0)
+				+ (above >= 0 ? isum[above] : 0)
+				- (diag  >= 0 ? isum[diag]  : 0);
+			icnt[idx] = cnt
+				+ (left  >= 0 ? icnt[left]  : 0)
+				+ (above >= 0 ? icnt[above] : 0)
+				- (diag  >= 0 ? icnt[diag]  : 0);
+		}
+	}
+
+	/* Query each non-zero pixel against its local window */
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			pos = (long int)y * bpl + x;
+			if (datasrc[pos] == 0) { datadst[pos] = 0; continue; }
+
+			{
+				/* Clamp window to image bounds */
+				int x0 = (x - k > 0)        ? x - k     : 0;
+				int y0 = (y - k > 0)        ? y - k     : 0;
+				int x1 = (x + k < width  - 1) ? x + k : width  - 1;
+				int y1 = (y + k < height - 1) ? y + k : height - 1;
+
+				/* Summed-area table rectangle query */
+				int a  =                    isum[y1 * width + x1];
+				int b  = (x0 > 0)         ? isum[y1 * width + (x0 - 1)] : 0;
+				int c  = (y0 > 0)         ? isum[(y0 - 1) * width + x1] : 0;
+				int d  = (x0 > 0 && y0 > 0) ? isum[(y0 - 1) * width + (x0 - 1)] : 0;
+				int wsum = a - b - c + d;
+
+				int na = icnt[y1 * width + x1];
+				int nb = (x0 > 0)         ? icnt[y1 * width + (x0 - 1)] : 0;
+				int nc = (y0 > 0)         ? icnt[(y0 - 1) * width + x1] : 0;
+				int nd = (x0 > 0 && y0 > 0) ? icnt[(y0 - 1) * width + (x0 - 1)] : 0;
+				int wcnt = na - nb - nc + nd;
+
+				if (wcnt == 0) { datadst[pos] = 0; continue; }
+
+				{
+					int mean     = wsum / wcnt;
+					int residual = mean - (int)datasrc[pos];
+					datadst[pos] = (residual > threshold) ? 255 : 0;
+				}
+			}
+		}
+	}
+
+	free(isum);
+	free(icnt);
 	return 1;
 }
 

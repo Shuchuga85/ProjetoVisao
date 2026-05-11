@@ -49,13 +49,19 @@ typedef struct {
 
 /* Dark spot classification thresholds (% of orange surface, EEC 379/71 II.D) */
 #define VC_SPOT_EXTRA   0.5f
-#define VC_SPOT_I       2.0f
-#define VC_SPOT_II      5.0f
+#define VC_SPOT_I       1.0f
+#define VC_SPOT_II      2.0f
 
 /* Dark spot detection: histogram-mode approach.
    Pixels whose gray value falls more than VC_SPOT_MARGIN below the dominant
    orange-surface gray level (histogram mode) are marked as dark spots. */
 #define VC_SPOT_MARGIN  25
+
+/* Dark spot detection: local mean subtraction via integral image.
+   Kernel should be larger than spots (~15px) but smaller than the shadow
+   gradient (~100px). Threshold is the minimum residual to call a spot. */
+#define VC_SPOT_KERNEL_LOCAL  31
+#define VC_SPOT_THRESHOLD     8
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //                    PROT�TIPOS DE FUN��ES
@@ -114,5 +120,6 @@ const char* vc_orange_category_name(int category);
 int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total);
 int vc_gray_dark_spot_detect(IVC* masked_gray, IVC* dst, int kernel, int cmin);
 int vc_gray_dark_spot_detect_mode(IVC* masked_gray, IVC* dst, int margin);
+int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int threshold);
 int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int nblobs);
 int vc_binary_subtract(IVC* src, IVC* subtrahend, IVC* dst);
