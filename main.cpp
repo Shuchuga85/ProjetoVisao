@@ -5,7 +5,7 @@
 #include <opencv2\highgui.hpp>
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
-#define DEBUG 5
+#define DEBUG 0
 // 0 = Original RGB with bounding boxes
 // 1 = Orange segmentation (temps[2], after morphological close)
 // 2 = Masked grayscale (orange area only)
