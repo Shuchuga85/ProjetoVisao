@@ -148,12 +148,13 @@ int main(void) {
 		// Converte a imagem RGB para HSV
 		vc_rgb_to_hsv(rgb, hsv);
 		// Segmenta a imagem HSV para a cor laranja
-		vc_hsv_segmentation(hsv, temps[1], 15, 35, 33, 100, 25, 100);
+		vc_hsv_segmentation(hsv, temps[1],
+			VC_ORANGE_H_MIN, VC_ORANGE_H_MAX,
+			VC_ORANGE_S_MIN, VC_ORANGE_S_MAX,
+			VC_ORANGE_V_MIN, VC_ORANGE_V_MAX);
 
 		// Fecho morfologico para eliminar ruido
 		vc_binary_close(temps[1], temps[2], 3, 3);
-
-		//vc_binary_dilate(temps[1], temps[2], 3);
 
 		// Detecao de manchas escuras
 		vc_rgb_to_gray(rgb, gray);
@@ -167,7 +168,11 @@ int main(void) {
 		if (blobs != NULL) {
 			vc_binary_blob_info(temps[3], blobs, nlabels);
 
-			filtered_blobs = vc_blob_filter_area(blobs, &nlabels, 90000);
+			// Classifica primeiro para obter diametro e deformacao (necessario para filtrar)
+			vc_orange_classify(blobs, nlabels);
+
+			// Filtra blobs com deformacao excessiva (>VC_FILTER_DEFORM_MAX) ou diametro abaixo do minimo (<53mm)
+			filtered_blobs = vc_blob_filter_deformation(blobs, &nlabels);
 			free(blobs);
 			blobs = NULL;
 
@@ -175,22 +180,36 @@ int main(void) {
 				// Conta manchas escuras por laranja
 				vc_blob_count_dark_spots(spot_binary, temps[3], filtered_blobs, nlabels);
 
-				// Classifica cada laranja: calibre, deformacao, categoria EEC 379/71
+				// Re-classifica com spot_ratio atualizado para categoria final correta
 				vc_orange_classify(filtered_blobs, nlabels);
 
 				// Desenha bounding boxes (azul) e centroide (vermelho) na imagem IVC
 				vc_draw_blobs(image, filtered_blobs, nlabels,
-					0, 0, 255,   // bounding box
+					255, 0, 0,   // bounding box
 					255, 0, 0,   // centroide
 					3);
 
-				// Desenha bounding boxes (azul) e centroide (vermelho) na segmentação binária (para debug)
+				// Desenha bounding boxes na segmentação binária (para debug)
 				vc_draw_blobs(temps[2], filtered_blobs, nlabels,
-					255, 255, 255,   // bounding box
-					0, 0, 0,   // centroide
+					255, 255, 255,
+					0, 0, 0,
 					3);
 			}
 		}
+
+		// Calcula diferenca de tamanho e uniformidade EEC 379/71 para a frame atual
+		float max_diam = 0.0f, min_diam = 1e9f;
+		if (filtered_blobs != NULL && nlabels > 0) {
+			for (int j = 0; j < nlabels; j++) {
+				if (filtered_blobs[j].diameter_mm > max_diam) max_diam = filtered_blobs[j].diameter_mm;
+				if (filtered_blobs[j].diameter_mm < min_diam) min_diam = filtered_blobs[j].diameter_mm;
+			}
+		}
+		float size_diff = (nlabels > 1) ? (max_diam - min_diam) : 0.0f;
+		// Tolerancia EEC 379/71: 10mm para calibres >= 73mm, 7mm para calibres < 73mm
+		float uniform_tol = (min_diam >= VC_UNIFORM_BOUNDARY_MM)
+			? VC_UNIFORM_TOL_LARGE : VC_UNIFORM_TOL_SMALL;
+		bool uniform_pass = (nlabels > 1) ? (size_diff <= uniform_tol) : true;
 
 		// Conta laranjas novas nesta frame e acumula no total
 		if (filtered_blobs != NULL)
@@ -200,9 +219,7 @@ int main(void) {
 
 		if (DEBUG == 0)
 		{
-			// Copia imagem IVC (com bounding boxes) de volta para o frame OpenCV
 			memcpy(frame.data, image->data, video.width * video.height * 3);
-			
 		}
 		else
 		{
@@ -210,51 +227,45 @@ int main(void) {
 			switch(DEBUG)
 			{
 				case 1:
-					// Copia imagem IVC da segmentação binária para o frame OpenCV
 					vc_gray_to_rgb(temps[2], rgb);
 					break;
 				case 2:
-					// Copia imagem IVC do grayscale mascarado para o frame OpenCV
 					vc_gray_to_rgb(masked_gray, rgb);
 					break;
 				case 3:
-					// Copia imagem IVC da detecção de manchas escuras para o frame OpenCV
 					vc_gray_to_rgb(spot_binary, rgb);
 					break;
 				case 5:
-					// Segmentação laranja com manchas escuras subtraídas (temps[2] - spot_binary)
 					vc_binary_subtract(temps[2], spot_binary, temps[0]);
 					vc_gray_to_rgb(temps[0], rgb);
 					break;
 			}
-			memcpy(frame.data, rgb->data, video.width* video.height * 3);
+			memcpy(frame.data, rgb->data, video.width * video.height * 3);
 		}
 
+		// --- Texto no topo (cor uniforme: branco) ---
+		const cv::Scalar INFO_COLOR(255, 255, 255);
+		char buf_top[128];
+		snprintf(buf_top, sizeof(buf_top), "Total: %d", total_laranjas);
+		cv::putText(frame, buf_top, cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 0.9, INFO_COLOR, 2);
+		snprintf(buf_top, sizeof(buf_top), "Laranjas na frame: %d", nlabels);
+		cv::putText(frame, buf_top, cv::Point(20, 62), cv::FONT_HERSHEY_SIMPLEX, 0.9, INFO_COLOR, 2);
+		snprintf(buf_top, sizeof(buf_top), "Frame: %d / %d", video.nframe, video.ntotalframes);
+		cv::putText(frame, buf_top, cv::Point(20, 94), cv::FONT_HERSHEY_SIMPLEX, 0.9, INFO_COLOR, 2);
 
-		// Texto: numero de laranjas na frame atual
-		str1 = "Laranjas frame: " + std::to_string(nlabels);
-		cv::putText(frame, str1, cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 255), 2);
-
-		// Texto: total acumulado de laranjas desde o inicio do video
-		str1 = "Total: " + std::to_string(total_laranjas);
-		cv::putText(frame, str1, cv::Point(20, 65), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
-
-		// Texto por laranja: classificacao EEC 379/71
+		// --- Texto por laranja: classificacao EEC 379/71 ---
 		if (filtered_blobs != NULL) {
+			const float px2mm2 = (float)(VC_PX_TO_MM * VC_PX_TO_MM);
 			for (int j = 0; j < nlabels; j++) {
-				//int tx = filtered_blobs[j].x;
-				//int ty = filtered_blobs[j].y - 8;
-				//if (ty < 40) ty = filtered_blobs[j].y + filtered_blobs[j].height + 20;
-
 				int tx = filtered_blobs[j].x;
 				int ty = filtered_blobs[j].y + filtered_blobs[j].height + 15;
 
 				char buf1[128], buf2[128];
-				snprintf(buf1, sizeof(buf1), "L:%d Area:%d PerImetro:%d",
+				snprintf(buf1, sizeof(buf1), "Label:%d Area:%.0fmm2 Perim:%d",
 					filtered_blobs[j].label,
-					filtered_blobs[j].area,
+					filtered_blobs[j].area * px2mm2,
 					filtered_blobs[j].perimeter);
-				snprintf(buf2, sizeof(buf2), "CAL:%d D:%.0fmm DEF:%.1f%% SPOT:%.1f%% CAT:%s",
+				snprintf(buf2, sizeof(buf2), "CAL:%d Diam:%.0fmm DEF:%.1f%% SPOT:%.1f%% CAT:%s",
 					filtered_blobs[j].calibre,
 					(double)filtered_blobs[j].diameter_mm,
 					(double)filtered_blobs[j].deformation,
@@ -262,13 +273,15 @@ int main(void) {
 					vc_orange_category_name(filtered_blobs[j].category));
 
 				cv::putText(frame, buf1, cv::Point(tx, ty),
-					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 2);
+					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 0, 0), 2);
 				cv::putText(frame, buf2, cv::Point(tx, ty + 18),
-					cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 0, 0), 2);
+					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 0, 0), 2);
 			}
 			free(filtered_blobs);
 			filtered_blobs = NULL;
 		}
+
+		
 
 		// Show frame
 		cv::imshow("VC - VIDEO", frame);
@@ -277,11 +290,15 @@ int main(void) {
 		//cv::imshow("VC - VIDEO", frame);
 
 		/* Sai da aplicação, se o utilizador premir a tecla 'q' */
-		key = cv::waitKey(30);
+		key = cv::waitKey(1);
 		// Toggle pause with 'p'
 		if (key == 'p')
 		{
-			paused = !paused;
+			paused = true;
+		}
+		else if (key == 'c')
+		{
+			paused = false;
 		}
 	}
 	vc_image_free(image);

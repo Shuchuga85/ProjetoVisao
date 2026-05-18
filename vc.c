@@ -2644,34 +2644,21 @@ int compare_int(const void* a, const void* b)
 	return (*(int*)a - *(int*)b);
 }
 
-OVC* vc_blob_filter_median(OVC* blobs, int* nblobs)
+// Filters blobs that fail the EEC 379/71 admission criteria:
+//   - deformation > VC_FILTER_DEFORM_MAX  (shape too irregular)
+//   - diameter_mm < VC_MIN_DIAMETER_MM    (below minimum size of 53 mm)
+// Requires vc_orange_classify() to have been called first.
+OVC* vc_blob_filter_deformation(OVC* blobs, int* nblobs)
 {
 	int i, count = 0;
 
 	if (blobs == NULL || nblobs == NULL || *nblobs <= 0)
 		return NULL;
 
-	// ----------- Compute median -----------
-	int* areas = (int*)malloc(sizeof(int) * (*nblobs));
-	if (areas == NULL) return NULL;
-
-	for (i = 0; i < *nblobs; i++)
-		areas[i] = blobs[i].area;
-
-	qsort(areas, *nblobs, sizeof(int), compare_int);
-
-	int median;
-	if (*nblobs % 2 == 0)
-		median = (areas[*nblobs / 2 - 1] + areas[*nblobs / 2]) / 2;
-	else
-		median = areas[*nblobs / 2];
-
-	free(areas);
-
-	// ----------- Count valid blobs -----------
 	for (i = 0; i < *nblobs; i++)
 	{
-		if (blobs[i].area >= median)
+		if (blobs[i].deformation <= VC_FILTER_DEFORM_MAX &&
+			blobs[i].diameter_mm >= VC_MIN_DIAMETER_MM)
 			count++;
 	}
 
@@ -2681,71 +2668,15 @@ OVC* vc_blob_filter_median(OVC* blobs, int* nblobs)
 		return NULL;
 	}
 
-	// ----------- Allocate filtered array -----------
 	OVC* filtered = (OVC*)calloc(count, sizeof(OVC));
 	if (filtered == NULL) return NULL;
 
 	int j = 0;
 	for (i = 0; i < *nblobs; i++)
 	{
-		if (blobs[i].area >= median)
-		{
+		if (blobs[i].deformation <= VC_FILTER_DEFORM_MAX &&
+			blobs[i].diameter_mm >= VC_MIN_DIAMETER_MM)
 			filtered[j++] = blobs[i];
-		}
-	}
-
-	*nblobs = count;
-	return filtered;
-}
-
-int vc_blob_mean_area(OVC* blobs, int nblobs)
-{
-	if (blobs == NULL || nblobs <= 0) return 0;
-
-	long int sum = 0;
-	int i;
-
-	for (i = 0; i < nblobs; i++)
-	{
-		sum += blobs[i].area;
-	}
-
-	return (int)(sum / nblobs);
-}
-OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs)
-{
-	int i, count = 0;
-
-	if (blobs == NULL || nblobs == NULL || *nblobs <= 0)
-		return NULL;
-
-	// ----------- Compute mean -----------
-	int mean = vc_blob_mean_area(blobs, *nblobs);
-
-	// ----------- Count valid blobs -----------
-	for (i = 0; i < *nblobs; i++)
-	{
-		if (blobs[i].area >= mean)
-			count++;
-	}
-
-	if (count == 0)
-	{
-		*nblobs = 0;
-		return NULL;
-	}
-
-	// ----------- Allocate filtered array -----------
-	OVC* filtered = (OVC*)calloc(count, sizeof(OVC));
-	if (filtered == NULL) return NULL;
-
-	int j = 0;
-	for (i = 0; i < *nblobs; i++)
-	{
-		if (blobs[i].area >= mean)
-		{
-			filtered[j++] = blobs[i];
-		}
 	}
 
 	*nblobs = count;
@@ -2775,18 +2706,12 @@ static const int vc_orange_size_table[14][2] = {
 	{ 53,  60}, /* 13 */
 };
 
-// Deformation thresholds (%) for quality category assignment.
-// Based on: deform = |blob_area - ideal_circle_area| / ideal_circle_area * 100
-// where ideal_circle_area = pi * (max(width,height)/2)^2
-// Calibrated to the formula output: normal oranges in video show DEF ~4-8%.
-#define VC_DEFORM_EXTRA  5.0f
-#define VC_DEFORM_I      10.0f
-#define VC_DEFORM_II     20.0f
+// Deformation thresholds moved to vc.h (VC_DEFORM_EXTRA / _I / _II)
 
 int vc_orange_classify(OVC* blobs, int nblobs)
 {
 	int i, c;
-	const float px_to_mm = 55.0f / 280.0f;
+	const float px_to_mm = VC_PX_TO_MM;
 	const float pi = 3.14159265f;
 
 	if (blobs == NULL || nblobs <= 0) return 0;
@@ -2871,8 +2796,7 @@ const char* vc_orange_category_name(int category)
 // prev_xc e prev_yc: arrays com os centroidos da frame anterior (tamanho MAX_BLOBS)
 // prev_count: numero de blobs na frame anterior
 // total: contador acumulado total (so cresce)
-#define VC_MAX_BLOBS 64
-#define VC_DIST_MAX  80
+// VC_MAX_BLOBS and VC_DIST_MAX are defined in vc.h
 
 int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total)
 {
@@ -2913,64 +2837,6 @@ int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, in
 		prev_yc[i] = blobs[i].yc;
 	}
 
-	return 1;
-}
-
-int vc_gray_dark_spot_detect(IVC* masked_gray, IVC* dst, int kernel, int cmin)
-{
-	unsigned char* datasrc;
-	unsigned char* datadst;
-	int width, height, bpl, k;
-	int x, y, i, j;
-
-	if (masked_gray == NULL || dst == NULL) return 0;
-
-	datasrc = (unsigned char*)masked_gray->data;
-	datadst = (unsigned char*)dst->data;
-	width   = masked_gray->width;
-	height  = masked_gray->height;
-	bpl     = masked_gray->bytesperline;
-	k       = kernel / 2;
-
-	if (width <= 0 || height <= 0 || datasrc == NULL || datadst == NULL) return 0;
-	if (width != dst->width || height != dst->height) return 0;
-	if (masked_gray->channels != 1 || dst->channels != 1) return 0;
-
-	for (y = 0; y < height; y++) {
-		for (x = 0; x < width; x++) {
-			long int pos = (long int)y * bpl + x;
-
-			if (datasrc[pos] == 0) { datadst[pos] = 0; continue; }
-
-			{
-				int local_min = 255, local_max = 0, count = 0;
-				int contrast, mid;
-
-				for (j = -k; j <= k; j++) {
-					for (i = -k; i <= k; i++) {
-						int xx = x + i, yy = y + j;
-						int val;
-						if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
-						val = datasrc[(long int)yy * bpl + xx];
-						if (val == 0) continue;
-						if (val < local_min) local_min = val;
-						if (val > local_max) local_max = val;
-						count++;
-					}
-				}
-
-				if (count == 0) { datadst[pos] = 0; continue; }
-
-				contrast = local_max - local_min;
-				if (contrast < cmin) {
-					datadst[pos] = 0;
-				} else {
-					mid = (local_min + local_max) / 2;
-					datadst[pos] = (datasrc[pos] < mid) ? 255 : 0;
-				}
-			}
-		}
-	}
 	return 1;
 }
 
@@ -3025,72 +2891,6 @@ int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int
 	return 1;
 }
 
-/* Detect dark spots using a histogram-mode approach.
- * Builds a 256-bin histogram of the non-zero (inside-orange) pixels in
- * masked_gray, finds the mode (the dominant orange-surface gray level),
- * and marks pixels more than 'margin' gray levels below the mode as dark
- * spots (dst = 255).  Pixels at or above (mode - margin), and all
- * background pixels (masked_gray == 0), are set to 0.
- * This avoids Bernsen's sensitivity to specular reflections and requires
- * no kernel scan. */
-int vc_gray_dark_spot_detect_mode(IVC* masked_gray, IVC* dst, int margin)
-{
-	unsigned char* datasrc;
-	unsigned char* datadst;
-	int width, height, bpl;
-	int x, y;
-	long int pos;
-	int hist[256] = { 0 };
-	int mode_val, mode_count, threshold;
-	int i;
-
-	if (masked_gray == NULL || dst == NULL) return 0;
-
-	datasrc = masked_gray->data;
-	datadst = dst->data;
-	width   = masked_gray->width;
-	height  = masked_gray->height;
-	bpl     = masked_gray->bytesperline;
-
-	if (datasrc == NULL || datadst == NULL) return 0;
-	if (width <= 0 || height <= 0) return 0;
-	if (width != dst->width || height != dst->height) return 0;
-	if (masked_gray->channels != 1 || dst->channels != 1) return 0;
-
-	/* Build histogram of non-zero pixels (inside orange area only) */
-	for (y = 0; y < height; y++) {
-		for (x = 0; x < width; x++) {
-			pos = (long int)y * bpl + x;
-			if (datasrc[pos] > 0)
-				hist[datasrc[pos]]++;
-		}
-	}
-
-	/* Find mode (bin with highest count = dominant orange surface tone) */
-	mode_val   = 1;
-	mode_count = 0;
-	for (i = 1; i < 256; i++) {
-		if (hist[i] > mode_count) {
-			mode_count = hist[i];
-			mode_val   = i;
-		}
-	}
-
-	threshold = mode_val - margin;
-	if (threshold < 1) threshold = 1;
-
-	/* Mark pixels below threshold as dark spots */
-	for (y = 0; y < height; y++) {
-		for (x = 0; x < width; x++) {
-			pos = (long int)y * bpl + x;
-			if (datasrc[pos] > 0 && datasrc[pos] < threshold)
-				datadst[pos] = 255;
-			else
-				datadst[pos] = 0;
-		}
-	}
-	return 1;
-}
 
 /* Detect dark spots via local mean subtraction using a 2D integral image.
  *

@@ -43,6 +43,17 @@ typedef struct {
 	float spot_ratio;
 } OVC;
 
+/* Pixel-to-mm conversion calibration: 280 px = 55 mm (assignment specification) */
+#define VC_PX_TO_MM  (55.0f / 280.0f)
+
+/* HSV segmentation range for orange colour */
+#define VC_ORANGE_H_MIN   15
+#define VC_ORANGE_H_MAX   35
+#define VC_ORANGE_S_MIN   33
+#define VC_ORANGE_S_MAX  100
+#define VC_ORANGE_V_MIN   25
+#define VC_ORANGE_V_MAX  100
+
 /* Dark spot detection tuning */
 #define VC_SPOT_KERNEL  11
 #define VC_SPOT_CMIN    30
@@ -62,6 +73,25 @@ typedef struct {
    gradient (~100px). Threshold is the minimum residual to call a spot. */
 #define VC_SPOT_KERNEL_LOCAL  31
 #define VC_SPOT_THRESHOLD     8
+
+/* Deformation thresholds (%) for quality category assignment (EEC 379/71) */
+#define VC_DEFORM_EXTRA   5.0f
+#define VC_DEFORM_I      10.0f
+#define VC_DEFORM_II     20.0f
+
+/* Blob filter thresholds derived from EEC 379/71 */
+#define VC_MIN_DIAMETER_MM    53.0f   /* oranges below this diameter are excluded */
+#define VC_FILTER_DEFORM_MAX  VC_DEFORM_II  /* blobs above this deformation % are excluded */
+
+/* Orange tracking across frames */
+#define VC_MAX_BLOBS  64
+#define VC_DIST_MAX   80
+
+/* Uniformity in size tolerance (EEC 379/71 Section V):
+   maximum allowed diameter difference between smallest and largest orange */
+#define VC_UNIFORM_TOL_LARGE   10.0f  /* mm — calibres 1–8  (diameter >= 73 mm) */
+#define VC_UNIFORM_TOL_SMALL    7.0f  /* mm — calibres 9–13 (diameter 53–73 mm) */
+#define VC_UNIFORM_BOUNDARY_MM 73.0f  /* mm — boundary between the two calibre groups */
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //                    PROT�TIPOS DE FUN��ES
@@ -113,13 +143,10 @@ int vc_gray_lowpass_median_filter(IVC* src, IVC* dst, int kernelsize);
 int vc_gray_lowpass_gaussian_filter(IVC* src, IVC* dst);
 int vc_gray_to_rgb(IVC* src, IVC* dst);
 OVC* vc_blob_filter_area(OVC* blobs, int* nblobs, int min_area);
-OVC* vc_blob_filter_median(OVC* blobs, int* nblobs);
-OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs);
+OVC* vc_blob_filter_deformation(OVC* blobs, int* nblobs);
 int vc_orange_classify(OVC* blobs, int nblobs);
 const char* vc_orange_category_name(int category);
 int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total);
-int vc_gray_dark_spot_detect(IVC* masked_gray, IVC* dst, int kernel, int cmin);
-int vc_gray_dark_spot_detect_mode(IVC* masked_gray, IVC* dst, int margin);
 int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int threshold);
 int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int nblobs);
 int vc_binary_subtract(IVC* src, IVC* subtrahend, IVC* dst);
