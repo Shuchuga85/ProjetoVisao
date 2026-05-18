@@ -4,6 +4,7 @@ project(MyApp C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Configurações do OpenCV
 set(OPENCV_INCLUDE "C:/opencv/build/include")
 set(OPENCV_LIB_DIR "C:/opencv/build/x64/vc16/lib")
 
@@ -19,14 +20,32 @@ target_link_libraries(MyApp PRIVATE
     $<$<CONFIG:Release>:opencv_world4130>
 )
 
-# Copy OpenCV world DLL next to the executable (debug vs release variant)
+# ---------------------------------------------------------------------
+# CONFIGURAÇÕES DE ALTA PERFORMANCE (MSVC)
+# ---------------------------------------------------------------------
+if(MSVC)
+    target_compile_options(MyApp PRIVATE
+        $<$<CONFIG:Release>:
+            /O2         # Velocidade máxima
+            /Oi         # Gera funções intrínsecas
+            /Ot         # Favorece código rápido em vez de pequeno
+            /Oy         # Omite ponteiro de frame (liberta um registo)
+            /fp:fast    # Matemática rápida (equivalente a -ffast-math)
+            /arch:AVX2  # Otimização p/ CPUs modernos (equivalente a -march)
+            /Qpar       # Auto-paralelização de ciclos (ajuda em loop unrolling)
+        >
+    )
+endif()
+# ---------------------------------------------------------------------
+
+# Copiar DLL do OpenCV após o Build
 add_custom_command(TARGET MyApp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "C:/opencv/build/x64/vc16/bin/opencv_world4130$<$<CONFIG:Debug>:d>.dll"
         $<TARGET_FILE_DIR:MyApp>
 )
 
-# Collect source images
+# Colecionar e copiar imagens de assets
 file(GLOB IMAGE_FILES "${CMAKE_SOURCE_DIR}/assets/*")
 
 add_custom_command(TARGET MyApp POST_BUILD

@@ -5,7 +5,7 @@
 #include <opencv2\highgui.hpp>
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
-#define DEBUG 0
+#define DEBUG 5
 // 0 = Original RGB with bounding boxes
 // 1 = Orange segmentation (temps[2], after morphological close)
 // 2 = Masked grayscale (orange area only)
@@ -126,6 +126,12 @@ int main(void) {
 	int prev_yc[VC_MAX_BLOBS] = { 0 };
 	int prev_count = 0;
 	bool paused = false;
+	cv::Scalar blobTextColor;
+	if (DEBUG != 0)
+		blobTextColor = cv::Scalar(255, 255, 255);
+	else
+		blobTextColor = cv::Scalar(0, 0, 0);
+
 
 	while (key != 'q') {
 		if (!paused)
@@ -161,7 +167,7 @@ int main(void) {
 		// Detecao de manchas escuras
 		vc_rgb_to_gray(rgb, gray);
 		vc_mask_crop(gray, temps[2], masked_gray);
-		vc_gray_local_mean_detect(masked_gray, spot_binary, VC_SPOT_KERNEL_LOCAL, VC_SPOT_THRESHOLD);
+		vc_gray_local_mean_detect_fast(masked_gray, spot_binary, VC_SPOT_KERNEL_LOCAL, VC_SPOT_THRESHOLD);
 
 		int nlabels = 0;
 		OVC* blobs = vc_binary_blob_labelling(temps[2], temps[3], &nlabels);
@@ -275,9 +281,9 @@ int main(void) {
 					vc_orange_category_name(filtered_blobs[j].category));
 
 				cv::putText(frame, buf1, cv::Point(tx, ty),
-					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
+					cv::FONT_HERSHEY_SIMPLEX, 0.6, blobTextColor, 2);
 				cv::putText(frame, buf2, cv::Point(tx, ty + 18),
-					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
+					cv::FONT_HERSHEY_SIMPLEX, 0.6, blobTextColor, 2);
 			}
 			free(filtered_blobs);
 			filtered_blobs = NULL;

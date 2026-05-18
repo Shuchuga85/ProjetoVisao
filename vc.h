@@ -61,7 +61,7 @@ typedef struct {
 /* Dark spot classification thresholds (% of orange surface, EEC 379/71 II.D) */
 #define VC_SPOT_EXTRA   0.5f
 #define VC_SPOT_I       1.0f
-#define VC_SPOT_II      2.0f
+#define VC_SPOT_II      2.5f
 
 /* Dark spot detection: histogram-mode approach.
    Pixels whose gray value falls more than VC_SPOT_MARGIN below the dominant
@@ -148,5 +148,6 @@ int vc_orange_classify(OVC* blobs, int nblobs);
 const char* vc_orange_category_name(int category);
 int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total);
 int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int threshold);
+int vc_gray_local_mean_detect_fast(IVC* img, IVC* dst, int kernel, int threshold);
 int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int nblobs);
 int vc_binary_subtract(IVC* src, IVC* subtrahend, IVC* dst);

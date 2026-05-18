@@ -2911,96 +2911,245 @@ int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int
  * 1280x720), freed before returning. */
 int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int threshold)
 {
-	unsigned char* datasrc;
-	unsigned char* datadst;
-	int  width, height, bpl;
-	int  x, y, k;
-	long int pos;
-	int* isum;   /* integral image: sum  of non-zero pixel values */
-	int* icnt;   /* integral image: count of non-zero pixels      */
+	// -----------------------------
+	// Basic image pointers + sizes
+	// -----------------------------
+	unsigned char* src = masked_gray->data;
+	unsigned char* out = dst->data;
 
-	if (masked_gray == NULL || dst == NULL) return 0;
+	int width = masked_gray->width;
+	int height = masked_gray->height;
+	int bpl = masked_gray->bytesperline;
 
-	datasrc = masked_gray->data;
-	datadst = dst->data;
-	width   = masked_gray->width;
-	height  = masked_gray->height;
-	bpl     = masked_gray->bytesperline;
-
-	if (datasrc == NULL || datadst == NULL) return 0;
+	// safety checks (same behavior)
+	if (!masked_gray || !dst) return 0;
+	if (!src || !out) return 0;
 	if (width <= 0 || height <= 0) return 0;
 	if (width != dst->width || height != dst->height) return 0;
 	if (masked_gray->channels != 1 || dst->channels != 1) return 0;
 
-	k = kernel / 2;
+	// kernel radius (e.g. kernel=21 → k=10)
+	int k = kernel / 2;
 
-	isum = (int*)calloc((size_t)width * height, sizeof(int));
-	icnt = (int*)calloc((size_t)width * height, sizeof(int));
-	if (isum == NULL || icnt == NULL) { free(isum); free(icnt); return 0; }
+	// -------------------------------------------------------
+	// Integral images (summed-area tables)
+	// -------------------------------------------------------
+	// isum[y,x] = sum of all NON-ZERO pixels from (0,0)->(y,x)
+	// icnt[y,x] = count of NON-ZERO pixels from (0,0)->(y,x)
 
-	/* Build 2D summed-area tables.
-	 * isum[y,x] = sum  of src values  for all (r<=y, c<=x) where src > 0
-	 * icnt[y,x] = count of src pixels for all (r<=y, c<=x) where src > 0 */
-	for (y = 0; y < height; y++) {
-		for (x = 0; x < width; x++) {
-			int idx  = y * width + x;
-			int above = (y > 0) ? (y - 1) * width + x : -1;
-			int left  = (x > 0) ? y * width + (x - 1) : -1;
-			int diag  = (x > 0 && y > 0) ? (y - 1) * width + (x - 1) : -1;
-			int v     = datasrc[(long int)y * bpl + x];
-			int val   = (v > 0) ? v : 0;
-			int cnt   = (v > 0) ? 1 : 0;
+	int* isum = calloc(width * height, sizeof(int));
+	int* icnt = calloc(width * height, sizeof(int));
 
-			isum[idx] = val
-				+ (left  >= 0 ? isum[left]  : 0)
+	if (!isum || !icnt) {
+		free(isum);
+		free(icnt);
+		return 0;
+	}
+
+	// =======================================================
+	// 1) BUILD INTEGRAL IMAGES
+	// =======================================================
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+
+			int idx = y * width + x;
+
+			// current pixel (0 if background)
+			int v = src[y * bpl + x];
+
+			// we ONLY consider non-zero pixels (mask behavior)
+			int val = (v > 0) ? v : 0;
+			int cnt = (v > 0) ? 1 : 0;
+
+			// neighbors in integral image
+			int left = (x > 0) ? idx - 1 : -1;
+			int above = (y > 0) ? idx - width : -1;
+			int diag = (x > 0 && y > 0) ? idx - width - 1 : -1;
+
+			// standard integral image formula:
+			// I(x,y) = current + left + above - diag
+
+			isum[idx] =
+				val
+				+ (left >= 0 ? isum[left] : 0)
 				+ (above >= 0 ? isum[above] : 0)
-				- (diag  >= 0 ? isum[diag]  : 0);
-			icnt[idx] = cnt
-				+ (left  >= 0 ? icnt[left]  : 0)
+				- (diag >= 0 ? isum[diag] : 0);
+
+			icnt[idx] =
+				cnt
+				+ (left >= 0 ? icnt[left] : 0)
 				+ (above >= 0 ? icnt[above] : 0)
-				- (diag  >= 0 ? icnt[diag]  : 0);
+				- (diag >= 0 ? icnt[diag] : 0);
 		}
 	}
 
-	/* Query each non-zero pixel against its local window */
-	for (y = 0; y < height; y++) {
-		for (x = 0; x < width; x++) {
-			pos = (long int)y * bpl + x;
-			if (datasrc[pos] == 0) { datadst[pos] = 0; continue; }
+	// =======================================================
+	// 2) LOCAL THRESHOLDING USING WINDOW
+	// =======================================================
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
 
-			{
-				/* Clamp window to image bounds */
-				int x0 = (x - k > 0)        ? x - k     : 0;
-				int y0 = (y - k > 0)        ? y - k     : 0;
-				int x1 = (x + k < width  - 1) ? x + k : width  - 1;
-				int y1 = (y + k < height - 1) ? y + k : height - 1;
+			int pos = y * bpl + x;
 
-				/* Summed-area table rectangle query */
-				int a  =                    isum[y1 * width + x1];
-				int b  = (x0 > 0)         ? isum[y1 * width + (x0 - 1)] : 0;
-				int c  = (y0 > 0)         ? isum[(y0 - 1) * width + x1] : 0;
-				int d  = (x0 > 0 && y0 > 0) ? isum[(y0 - 1) * width + (x0 - 1)] : 0;
-				int wsum = a - b - c + d;
-
-				int na = icnt[y1 * width + x1];
-				int nb = (x0 > 0)         ? icnt[y1 * width + (x0 - 1)] : 0;
-				int nc = (y0 > 0)         ? icnt[(y0 - 1) * width + x1] : 0;
-				int nd = (x0 > 0 && y0 > 0) ? icnt[(y0 - 1) * width + (x0 - 1)] : 0;
-				int wcnt = na - nb - nc + nd;
-
-				if (wcnt == 0) { datadst[pos] = 0; continue; }
-
-				{
-					int mean     = wsum / wcnt;
-					int residual = mean - (int)datasrc[pos];
-					datadst[pos] = (residual > threshold) ? 255 : 0;
-				}
+			// background pixels stay zero
+			if (src[pos] == 0) {
+				out[pos] = 0;
+				continue;
 			}
+
+			// -----------------------------
+			// define local window
+			// -----------------------------
+			int x0 = (x - k > 0) ? x - k : 0;
+			int y0 = (y - k > 0) ? y - k : 0;
+			int x1 = (x + k < width - 1) ? x + k : width - 1;
+			int y1 = (y + k < height - 1) ? y + k : height - 1;
+
+			// -------------------------------------------------
+			// FAST WINDOW SUM using integral image trick:
+			//
+			// Example:
+			// window sum = A - B - C + D
+			// -------------------------------------------------
+
+			int A = isum[y1 * width + x1];
+			int B = (x0 > 0) ? isum[y1 * width + (x0 - 1)] : 0;
+			int C = (y0 > 0) ? isum[(y0 - 1) * width + x1] : 0;
+			int D = (x0 > 0 && y0 > 0)
+				? isum[(y0 - 1) * width + (x0 - 1)] : 0;
+
+			int window_sum = A - B - C + D;
+
+			// same for count of valid pixels
+			int NA = icnt[y1 * width + x1];
+			int NB = (x0 > 0) ? icnt[y1 * width + (x0 - 1)] : 0;
+			int NC = (y0 > 0) ? icnt[(y0 - 1) * width + x1] : 0;
+			int ND = (x0 > 0 && y0 > 0)
+				? icnt[(y0 - 1) * width + (x0 - 1)] : 0;
+
+			int window_count = NA - NB - NC + ND;
+
+			// avoid division by zero
+			if (window_count == 0) {
+				out[pos] = 0;
+				continue;
+			}
+
+			// -------------------------------------------------
+			// LOCAL MEAN BACKGROUND ESTIMATION
+			// -------------------------------------------------
+
+			int mean = window_sum / window_count;
+
+			/*
+			 * Example:
+			 * window_sum = 2000
+			 * window_count = 25
+			 * mean = 80
+			 *
+			 * current pixel = 40
+			 *
+			 * residual = 80 - 40 = 40
+			 */
+
+			int residual = mean - (int)src[pos];
+
+			// -------------------------------------------------
+			// FINAL DECISION
+			// -------------------------------------------------
+			// If pixel is much darker than local mean → spot
+			out[pos] = (residual > threshold) ? 255 : 0;
 		}
 	}
 
 	free(isum);
 	free(icnt);
+
+	return 1;
+}
+
+typedef struct {
+	int sum;
+	int cnt;
+} Cell;
+
+int vc_gray_local_mean_detect_fast(IVC* img, IVC* dst, int kernel, int threshold)
+{
+	unsigned char* src = img->data;
+	unsigned char* out = dst->data;
+
+	int w = img->width;
+	int h = img->height;
+	int bpl = img->bytesperline;
+
+	int k = kernel / 2;
+
+	Cell* sat = calloc(w * h, sizeof(Cell));
+	if (!sat) return 0;
+
+	// --------------------------
+	// Build SAT (fused structure)
+	// --------------------------
+	for (int y = 0; y < h; y++) {
+		Cell* row = sat + y * w;
+		Cell* row_up = (y > 0) ? sat + (y - 1) * w : NULL;
+
+		for (int x = 0; x < w; x++) {
+
+			int v = src[y * bpl + x];
+
+			int val = (v > 0) ? v : 0;
+			int cnt = (v > 0) ? 1 : 0;
+
+			Cell left = (x > 0) ? row[x - 1] : (Cell) { 0, 0 };
+			Cell above = (y > 0) ? row_up[x] : (Cell) { 0, 0 };
+			Cell diag = (x > 0 && y > 0) ? row_up[x - 1] : (Cell) { 0, 0 };
+
+			row[x].sum = val + left.sum + above.sum - diag.sum;
+			row[x].cnt = cnt + left.cnt + above.cnt - diag.cnt;
+		}
+	}
+
+	// --------------------------
+	// Query
+	// --------------------------
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+
+			int pos = y * bpl + x;
+			int v = src[pos];
+
+			if (!v) {
+				out[pos] = 0;
+				continue;
+			}
+
+			int x0 = (x - k > 0) ? x - k : 0;
+			int y0 = (y - k > 0) ? y - k : 0;
+			int x1 = (x + k < w - 1) ? x + k : w - 1;
+			int y1 = (y + k < h - 1) ? y + k : h - 1;
+
+			Cell A = sat[y1 * w + x1];
+			Cell B = (x0 > 0) ? sat[y1 * w + x0 - 1] : (Cell) { 0, 0 };
+			Cell C = (y0 > 0) ? sat[(y0 - 1) * w + x1] : (Cell) { 0, 0 };
+			Cell D = (x0 > 0 && y0 > 0) ? sat[(y0 - 1) * w + x0 - 1] : (Cell) { 0, 0 };
+
+			int sum = A.sum - B.sum - C.sum + D.sum;
+			int cnt = A.cnt - B.cnt - C.cnt + D.cnt;
+
+			if (!cnt) {
+				out[pos] = 0;
+				continue;
+			}
+
+			int mean = sum / cnt;
+			int residual = mean - v;
+
+			out[pos] = (residual > threshold) ? 255 : 0;
+		}
+	}
+
+	free(sat);
 	return 1;
 }
 
