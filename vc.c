@@ -2757,24 +2757,6 @@ OVC* vc_blob_filter_mean(OVC* blobs, int* nblobs)
 // Calibration: 280 pixels = 55 mm (from assignment specification)
 // ---------------------------------------------------------------------------
 
-// EEC orange size table [calibre 0..13]: {min_mm, max_mm}
-static const int vc_orange_size_table[14][2] = {
-	{100, 999}, /* 0  */
-	{ 87, 100}, /* 1  */
-	{ 84,  96}, /* 2  */
-	{ 81,  92}, /* 3  */
-	{ 77,  88}, /* 4  */
-	{ 73,  84}, /* 5  */
-	{ 70,  80}, /* 6  */
-	{ 67,  76}, /* 7  */
-	{ 64,  73}, /* 8  */
-	{ 62,  70}, /* 9  */
-	{ 60,  68}, /* 10 */
-	{ 58,  66}, /* 11 */
-	{ 56,  63}, /* 12 */
-	{ 53,  60}, /* 13 */
-};
-
 // Deformation thresholds (%) for quality category assignment.
 // Based on: deform = |blob_area - ideal_circle_area| / ideal_circle_area * 100
 // where ideal_circle_area = pi * (max(width,height)/2)^2
@@ -2797,24 +2779,52 @@ int vc_orange_classify(OVC* blobs, int nblobs)
 		float diam_px = (blobs[i].width + blobs[i].height) / 2.0f;
 		blobs[i].diameter_mm = diam_px * px_to_mm;
 
-		// Assign calibre by finding the range whose centre is closest to the
-		// measured diameter. Requires the diameter to actually fall inside the range.
-		blobs[i].calibre = -1;
-		float best_dist = 1e9f;
-		for (c = 0; c < 14; c++)
-		{
-			float lo = (float)vc_orange_size_table[c][0];
-			float hi = (float)vc_orange_size_table[c][1];
-			if (blobs[i].diameter_mm < lo || blobs[i].diameter_mm > hi)
-				continue;
-			float centre = (lo + hi) / 2.0f;
-			float dist = blobs[i].diameter_mm - centre;
-			if (dist < 0.0f) dist = -dist;
-			if (dist < best_dist)
-			{
-				best_dist = dist;
-				blobs[i].calibre = c;
-			}
+		float diam = blobs[i].diameter_mm;
+
+		if (diam >= 100.0f) {
+			blobs[i].calibre = 0;
+		}
+		else if (diam >= 87.0f && diam <= 100.0f) {
+			blobs[i].calibre = 1;
+		}
+		else if (diam >= 84.0f && diam <= 96.0f) {
+			blobs[i].calibre = 2;
+		}
+		else if (diam >= 81.0f && diam <= 92.0f) {
+			blobs[i].calibre = 3;
+		}
+		else if (diam >= 77.0f && diam <= 88.0f) {
+			blobs[i].calibre = 4;
+		}
+		else if (diam >= 73.0f && diam <= 84.0f) {
+			blobs[i].calibre = 5;
+		}
+		else if (diam >= 70.0f && diam <= 80.0f) {
+			blobs[i].calibre = 6;
+		}
+		else if (diam >= 67.0f && diam <= 76.0f) {
+			blobs[i].calibre = 7;
+		}
+		else if (diam >= 64.0f && diam <= 73.0f) {
+			blobs[i].calibre = 8;
+		}
+		else if (diam >= 62.0f && diam <= 70.0f) {
+			blobs[i].calibre = 9;
+		}
+		else if (diam >= 60.0f && diam <= 68.0f) {
+			blobs[i].calibre = 10;
+		}
+		else if (diam >= 58.0f && diam <= 66.0f) {
+			blobs[i].calibre = 11;
+		}
+		else if (diam >= 56.0f && diam <= 63.0f) {
+			blobs[i].calibre = 12;
+		}
+		else if (diam >= 53.0f && diam <= 60.0f) {
+			blobs[i].calibre = 13;
+		}
+		else {
+			blobs[i].calibre = -1;   // abaixo do mínimo
 		}
 
 		// ---- Shape deformation ----
