@@ -10,7 +10,7 @@
 // 1 = Orange segmentation (temps[2], after morphological close)
 // 2 = Masked grayscale (orange area only)
 // 3 = Dark spot binary (spot_binary)
-// 5 = Orange segmentation minus detected dark spots (temps[2] - spot_binary)
+// 4 = Orange segmentation minus detected dark spots (temps[2] - spot_binary)
 
 extern "C" {
 #include "vc.h"
@@ -249,7 +249,7 @@ int main(void) {
 				case 3:
 					vc_gray_to_rgb(spot_binary, rgb);
 					break;
-				case 5:
+				case 4:
 					vc_binary_subtract(temps[2], spot_binary, temps[0]);
 					vc_gray_to_rgb(temps[0], rgb);
 					break;
