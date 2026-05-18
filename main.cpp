@@ -5,7 +5,7 @@
 #include <opencv2\highgui.hpp>
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
-#define DEBUG 0
+#define DEBUG 2
 // 0 = Original RGB with bounding boxes
 // 1 = Orange segmentation (temps[2], after morphological close)
 // 2 = Masked grayscale (orange area only)
@@ -338,6 +338,10 @@ int main(void) {
 	vc_image_free(gray);
 	vc_image_free(masked_gray);
 	vc_image_free(spot_binary);
+	vc_image_free(hsv);
+	vc_image_free(rgb);
+	for (int i = 0; i < templength; i++)
+		vc_image_free(temps[i]);
 
 	/* Fecha a janela */
 	cv::destroyWindow("VC - VIDEO");
