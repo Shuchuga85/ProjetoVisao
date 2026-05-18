@@ -26,8 +26,6 @@ int main(void) {
 		int fps;
 		int nframe;
 	} video;
-	std::string str;
-	std::string str1;
 	char key = 0;
 
 	/* Leitura de v�deo de um ficheiro */
@@ -124,8 +122,8 @@ int main(void) {
 
 	// Variaveis para contagem total de laranjas
 	int total_laranjas = 0;
-	int prev_xc[64] = { 0 };
-	int prev_yc[64] = { 0 };
+	int prev_xc[VC_MAX_BLOBS] = { 0 };
+	int prev_yc[VC_MAX_BLOBS] = { 0 };
 	int prev_count = 0;
 	bool paused = false;
 
@@ -141,6 +139,8 @@ int main(void) {
 		/* Número da frame a processar */
 		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
+		// --- Segmentação da laranja ---
+
 		// Copia pixeis do frame para a imagem IVC
 		memcpy(image->data, frame.data, video.width * video.height * 3);
 		// Altera a ordem dos pixeis de BGR para RGB
@@ -155,6 +155,8 @@ int main(void) {
 
 		// Fecho morfologico para eliminar ruido
 		vc_binary_close(temps[1], temps[2], 3, 3);
+
+		// --- Segmentação dos defeitos ---
 
 		// Detecao de manchas escuras
 		vc_rgb_to_gray(rgb, gray);
