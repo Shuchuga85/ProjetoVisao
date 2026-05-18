@@ -2726,16 +2726,17 @@ int vc_orange_classify(OVC* blobs, int nblobs)
 		// measured diameter. Requires the diameter to actually fall inside the range.
 		blobs[i].calibre = -1;
 		float best_dist = 1e9f;
-		for (c = 0; c < 14; c++)
+		for (c = 0; c < 14; c++)// para cada calibre
 		{
 			float lo = (float)vc_orange_size_table[c][0];
 			float hi = (float)vc_orange_size_table[c][1];
 			if (blobs[i].diameter_mm < lo || blobs[i].diameter_mm > hi)
 				continue;
-			float centre = (lo + hi) / 2.0f;
-			float dist = blobs[i].diameter_mm - centre;
-			if (dist < 0.0f) dist = -dist;
-			if (dist < best_dist)
+			float centre = (lo + hi) / 2.0f; // meio do intervalo 100+87/2 = 93.5
+			float dist = blobs[i].diameter_mm - centre; // distancia do centro do intervalo ex 94- 93.5 = 0.5
+			if (dist < 0.0f) dist = -dist; // absoluto, nao permite negativo
+
+			if (dist < best_dist) // best_dist começa a 1m, entao o primeiro é o menor, mas depois o melhor é o que tiver a menor distancia do centro do intervalo
 			{
 				best_dist = dist;
 				blobs[i].calibre = c;

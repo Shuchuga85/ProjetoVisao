@@ -261,10 +261,10 @@ int main(void) {
 				int ty = filtered_blobs[j].y + filtered_blobs[j].height + 15;
 
 				char buf1[128], buf2[128];
-				snprintf(buf1, sizeof(buf1), "Label:%d Area:%.0fmm2 Perim:%d",
+				snprintf(buf1, sizeof(buf1), "Label:%d Area:%.0fmm2 Perim:%.1fmm",
 					filtered_blobs[j].label,
 					filtered_blobs[j].area * px2mm2,
-					filtered_blobs[j].perimeter);
+					filtered_blobs[j].perimeter * VC_PX_TO_MM);
 				snprintf(buf2, sizeof(buf2), "CAL:%d Diam:%.0fmm DEF:%.1f%% SPOT:%.1f%% CAT:%s",
 					filtered_blobs[j].calibre,
 					(double)filtered_blobs[j].diameter_mm,
@@ -273,9 +273,9 @@ int main(void) {
 					vc_orange_category_name(filtered_blobs[j].category));
 
 				cv::putText(frame, buf1, cv::Point(tx, ty),
-					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 0, 0), 2);
+					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
 				cv::putText(frame, buf2, cv::Point(tx, ty + 18),
-					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 0, 0), 2);
+					cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
 			}
 			free(filtered_blobs);
 			filtered_blobs = NULL;
