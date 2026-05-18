@@ -126,6 +126,10 @@ int main(void) {
 	int prev_yc[VC_MAX_BLOBS] = { 0 };
 	int prev_count = 0;
 	bool paused = false;
+
+	// Estatisticas globais acumuladas ao longo de todo o video
+	float global_min_diam = 1e9f;
+	float global_max_diam = 0.0f;
 	cv::Scalar blobTextColor;
 	if (DEBUG != 0)
 		blobTextColor = cv::Scalar(255, 255, 255);
@@ -205,19 +209,21 @@ int main(void) {
 			}
 		}
 
-		// Calcula diferenca de tamanho e uniformidade EEC 379/71 para a frame atual
-		float max_diam = 0.0f, min_diam = 1e9f;
+		// Atualiza o minimo e maximo global de diametro (acumulado ao longo do video)
 		if (filtered_blobs != NULL && nlabels > 0) {
 			for (int j = 0; j < nlabels; j++) {
-				if (filtered_blobs[j].diameter_mm > max_diam) max_diam = filtered_blobs[j].diameter_mm;
-				if (filtered_blobs[j].diameter_mm < min_diam) min_diam = filtered_blobs[j].diameter_mm;
+				if (filtered_blobs[j].diameter_mm > global_max_diam) global_max_diam = filtered_blobs[j].diameter_mm;
+				if (filtered_blobs[j].diameter_mm < global_min_diam) global_min_diam = filtered_blobs[j].diameter_mm;
 			}
 		}
-		float size_diff = (nlabels > 1) ? (max_diam - min_diam) : 0.0f;
-		// Tolerancia EEC 379/71: 10mm para calibres >= 73mm, 7mm para calibres < 73mm
-		float uniform_tol = (min_diam >= VC_UNIFORM_BOUNDARY_MM)
+
+		// Diferenca e uniformidade globais (toda a corrida do video ate agora)
+		bool have_oranges = (global_max_diam > 0.0f);
+		float global_size_diff = have_oranges ? (global_max_diam - global_min_diam) : 0.0f;
+		// Tolerancia EEC 379/71: 10mm para calibres >= 73mm, 7mm abaixo disso
+		float global_uniform_tol = (have_oranges && global_min_diam >= VC_UNIFORM_BOUNDARY_MM)
 			? VC_UNIFORM_TOL_LARGE : VC_UNIFORM_TOL_SMALL;
-		bool uniform_pass = (nlabels > 1) ? (size_diff <= uniform_tol) : true;
+		bool global_uniform_pass = !have_oranges || (global_size_diff <= global_uniform_tol);
 
 		// Conta laranjas novas nesta frame e acumula no total
 		if (filtered_blobs != NULL)
@@ -291,6 +297,25 @@ int main(void) {
 
 		
 
+		// --- Texto na base: diferenca de tamanho e uniformidade (acumulado do video) ---
+		{
+			char buf_bot[256];
+			int by = video.height - 40;
+			if (have_oranges) {
+				snprintf(buf_bot, sizeof(buf_bot), "Diferenca maxima de tamanho: %.1fmm", (double)global_size_diff);
+				cv::putText(frame, buf_bot, cv::Point(20, by),
+					cv::FONT_HERSHEY_SIMPLEX, 0.7, INFO_COLOR, 2);
+				snprintf(buf_bot, sizeof(buf_bot), "Uniformidade em tamanho: %s  (lim: %.0fmm)",
+					global_uniform_pass ? "CONFORME" : "NAO CONFORME", (double)global_uniform_tol);
+				cv::putText(frame, buf_bot, cv::Point(20, by + 30),
+					cv::FONT_HERSHEY_SIMPLEX, 0.7,
+					global_uniform_pass ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 0, 255), 2);
+			} else {
+				cv::putText(frame, "Uniformidade: N/A", cv::Point(20, by),
+					cv::FONT_HERSHEY_SIMPLEX, 0.7, INFO_COLOR, 2);
+			}
+		}
+
 		// Show frame
 		cv::imshow("VC - VIDEO", frame);
 	}
@@ -319,6 +344,26 @@ int main(void) {
 
 	/* Fecha o ficheiro de v�deo */
 	capture.release();
+
+	// --- Relatorio final no console ---
+	printf("\n=======================================\n");
+	printf("       RELATORIO FINAL DE ANALISE      \n");
+	printf("=======================================\n");
+	printf("Frames processadas    : %d / %d\n", video.nframe, video.ntotalframes);
+	printf("Total de laranjas     : %d\n", total_laranjas);
+	if (global_max_diam > 0.0f) {
+		float diff = global_max_diam - global_min_diam;
+		float tol  = (global_min_diam >= VC_UNIFORM_BOUNDARY_MM)
+		             ? VC_UNIFORM_TOL_LARGE : VC_UNIFORM_TOL_SMALL;
+		printf("Diametro minimo       : %.1f mm\n", (double)global_min_diam);
+		printf("Diametro maximo       : %.1f mm\n", (double)global_max_diam);
+		printf("Diferenca de tamanho  : %.1f mm\n", (double)diff);
+		printf("Limite uniformidade   : %.0f mm  (EEC 379/71)\n", (double)tol);
+		printf("Uniformidade          : %s\n", (diff <= tol) ? "CONFORME" : "NAO CONFORME");
+	} else {
+		printf("Nenhuma laranja detetada.\n");
+	}
+	printf("=======================================\n");
 
 	return 0;
 }
