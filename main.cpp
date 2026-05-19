@@ -5,7 +5,7 @@
 #include <opencv2\highgui.hpp>
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
-#define DEBUG 2
+#define DEBUG 0
 // 0 = Original RGB with bounding boxes
 // 1 = Orange segmentation (temps[2], after morphological close)
 // 2 = Masked grayscale (orange area only)
@@ -28,36 +28,28 @@ int main(void) {
 	} video;
 	char key = 0;
 
-	/* Leitura de v�deo de um ficheiro */
-	/* NOTA IMPORTANTE:
-	O ficheiro video.avi dever� estar localizado no mesmo direct�rio que o ficheiro de c�digo fonte.
-	*/
+	
 	capture.open(videofile);
 
-	/* Em alternativa, abrir captura de v�deo pela Webcam #0 */
-	//capture.open(0, cv::CAP_DSHOW); // Pode-se utilizar apenas capture.open(0);
-
-	/* Verifica se foi poss�vel abrir o ficheiro de v�deo */
+	
 	if (!capture.isOpened())
 	{
 		std::cerr << "Erro ao abrir o ficheiro de video!\n";
 		return 1;
 	}
 
-	/* N�mero total de frames no v�deo */
+	
 	video.ntotalframes = (int)capture.get(cv::CAP_PROP_FRAME_COUNT);
-	/* Frame rate do v�deo */
+	
 	video.fps = (int)capture.get(cv::CAP_PROP_FPS);
-	/* Resolu��o do v�deo */
+	
 	video.width = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
 	video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
 
-	/* Cria uma janela para exibir o v�deo */
+	
 	cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
 
 	cv::Mat frame;
-
-	// Imagens IVC
 
 	IVC* hsv;
 	IVC* rgb;
@@ -120,14 +112,12 @@ int main(void) {
 		return 0;
 	}
 
-	// Variaveis para contagem total de laranjas
 	int total_laranjas = 0;
 	int prev_xc[VC_MAX_BLOBS] = { 0 };
 	int prev_yc[VC_MAX_BLOBS] = { 0 };
 	int prev_count = 0;
 	bool paused = false;
 
-	// Estatisticas globais acumuladas ao longo de todo o video
 	float global_min_diam = 1e9f;
 	float global_max_diam = 0.0f;
 	cv::Scalar blobTextColor;
@@ -140,35 +130,24 @@ int main(void) {
 	while (key != 'q') {
 		if (!paused)
 		{
-		/* Leitura de uma frame do vídeo */
 		capture.read(frame);
 
-		/* Verifica se conseguiu ler a frame */
 		if (frame.empty()) break;
 
-		/* Número da frame a processar */
 		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
-		// --- Segmentação da laranja ---
-
-		// Copia pixeis do frame para a imagem IVC
 		memcpy(image->data, frame.data, video.width * video.height * 3);
-		// Altera a ordem dos pixeis de BGR para RGB
+
 		vc_bgr_to_rgb(image, rgb);
-		// Converte a imagem RGB para HSV
 		vc_rgb_to_hsv(rgb, hsv);
-		// Segmenta a imagem HSV para a cor laranja
 		vc_hsv_segmentation(hsv, temps[1],
 			VC_ORANGE_H_MIN, VC_ORANGE_H_MAX,
 			VC_ORANGE_S_MIN, VC_ORANGE_S_MAX,
 			VC_ORANGE_V_MIN, VC_ORANGE_V_MAX);
-
-		// Fecho morfologico para eliminar ruido
 		vc_binary_close(temps[1], temps[2], 3, 3);
 
-		// --- Segmentação dos defeitos ---
 
-		// Detecao de manchas escuras
+
 		vc_rgb_to_gray(rgb, gray);
 		vc_mask_crop(gray, temps[2], masked_gray);
 		vc_gray_local_mean_detect_fast(masked_gray, spot_binary, VC_SPOT_KERNEL_LOCAL, VC_SPOT_THRESHOLD);
@@ -180,28 +159,22 @@ int main(void) {
 		if (blobs != NULL) {
 			vc_binary_blob_info(temps[3], blobs, nlabels);
 
-			// Classifica primeiro para obter diametro e deformacao (necessario para filtrar)
 			vc_orange_classify(blobs, nlabels);
 
-			// Filtra blobs com deformacao excessiva (>VC_FILTER_DEFORM_MAX) ou diametro abaixo do minimo (<53mm)
 			filtered_blobs = vc_blob_filter_deformation(blobs, &nlabels);
 			free(blobs);
 			blobs = NULL;
 
 			if (filtered_blobs != NULL) {
-				// Conta manchas escuras por laranja
 				vc_blob_count_dark_spots(spot_binary, temps[3], filtered_blobs, nlabels);
 
-				// Re-classifica com spot_ratio atualizado para categoria final correta
 				vc_orange_classify(filtered_blobs, nlabels);
 
-				// Desenha bounding boxes (azul) e centroide (vermelho) na imagem IVC
 				vc_draw_blobs(image, filtered_blobs, nlabels,
-					255, 0, 0,   // bounding box
-					255, 0, 0,   // centroide
+					255, 0, 0,   
+					255, 0, 0,   
 					3);
 
-				// Desenha bounding boxes na segmentação binária (para debug)
 				vc_draw_blobs(temps[2], filtered_blobs, nlabels,
 					255, 255, 255,
 					0, 0, 0,
@@ -209,7 +182,6 @@ int main(void) {
 			}
 		}
 
-		// Atualiza o minimo e maximo global de diametro (acumulado ao longo do video)
 		if (filtered_blobs != NULL && nlabels > 0) {
 			for (int j = 0; j < nlabels; j++) {
 				if (filtered_blobs[j].diameter_mm > global_max_diam) global_max_diam = filtered_blobs[j].diameter_mm;
@@ -217,19 +189,22 @@ int main(void) {
 			}
 		}
 
-		// Diferenca e uniformidade globais (toda a corrida do video ate agora)
 		bool have_oranges = (global_max_diam > 0.0f);
 		float global_size_diff = have_oranges ? (global_max_diam - global_min_diam) : 0.0f;
-		// Tolerancia EEC 379/71: 10mm para calibres >= 73mm, 7mm abaixo disso
+
+
 		float global_uniform_tol = (have_oranges && global_min_diam >= VC_UNIFORM_BOUNDARY_MM)
 			? VC_UNIFORM_TOL_LARGE : VC_UNIFORM_TOL_SMALL;
 		bool global_uniform_pass = !have_oranges || (global_size_diff <= global_uniform_tol);
 
-		// Conta laranjas novas nesta frame e acumula no total
+
 		if (filtered_blobs != NULL)
 			vc_count_new_oranges(filtered_blobs, nlabels, prev_xc, prev_yc, &prev_count, &total_laranjas);
 		else
 			vc_count_new_oranges(NULL, 0, prev_xc, prev_yc, &prev_count, &total_laranjas);
+
+
+
 
 		if (DEBUG == 0)
 		{
@@ -257,7 +232,7 @@ int main(void) {
 			memcpy(frame.data, rgb->data, video.width * video.height * 3);
 		}
 
-		// --- Texto no topo (cor uniforme: branco) ---
+
 		const cv::Scalar INFO_COLOR(255, 255, 255);
 		char buf_top[128];
 		snprintf(buf_top, sizeof(buf_top), "Total: %d", total_laranjas);
@@ -267,7 +242,8 @@ int main(void) {
 		snprintf(buf_top, sizeof(buf_top), "Frame: %d / %d", video.nframe, video.ntotalframes);
 		cv::putText(frame, buf_top, cv::Point(20, 94), cv::FONT_HERSHEY_SIMPLEX, 0.9, INFO_COLOR, 2);
 
-		// --- Texto por laranja: classificacao EEC 379/71 ---
+
+
 		if (filtered_blobs != NULL) {
 			const float px2mm2 = (float)(VC_PX_TO_MM * VC_PX_TO_MM);
 			for (int j = 0; j < nlabels; j++) {
@@ -297,7 +273,6 @@ int main(void) {
 
 		
 
-		// --- Texto na base: diferenca de tamanho e uniformidade (acumulado do video) ---
 		{
 			char buf_bot[256];
 			int by = video.height - 40;
@@ -316,15 +291,12 @@ int main(void) {
 			}
 		}
 
-		// Show frame
 		cv::imshow("VC - VIDEO", frame);
 	}
-		/* Exibe a frame */
-		//cv::imshow("VC - VIDEO", frame);
 
-		/* Sai da aplicação, se o utilizador premir a tecla 'q' */
+
+
 		key = cv::waitKey(1);
-		// Toggle pause with 'p'
 		if (key == 'p')
 		{
 			paused = true;
@@ -343,13 +315,10 @@ int main(void) {
 	for (int i = 0; i < templength; i++)
 		vc_image_free(temps[i]);
 
-	/* Fecha a janela */
 	cv::destroyWindow("VC - VIDEO");
 
-	/* Fecha o ficheiro de v�deo */
 	capture.release();
 
-	// --- Relatorio final no console ---
 	printf("\n=======================================\n");
 	printf("       RELATORIO FINAL DE ANALISE      \n");
 	printf("=======================================\n");

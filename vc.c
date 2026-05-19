@@ -24,7 +24,6 @@
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
-// Alocar mem�ria para uma imagem
 IVC *vc_image_new(int width, int height, int channels, int levels)
 {
 	IVC *image = (IVC *) malloc(sizeof(IVC));
@@ -48,7 +47,6 @@ IVC *vc_image_new(int width, int height, int channels, int levels)
 }
 
 
-// Libertar mem�ria de uma imagem
 IVC *vc_image_free(IVC *image)
 {
 	if(image != NULL)
@@ -526,17 +524,6 @@ int vc_rgb_to_hsv(IVC* src, IVC* dst)
 			}
 			else
 			{
-				/*
-				if (max == r)
-					h = 60.0f * fmodf(((g - b) / delta), 6.0f);
-				else if (max == g)
-					h = 60.0f * (((b - r) / delta) + 2.0f);
-				else
-					h = 60.0f * (((r - g) / delta) + 4.0f);
-
-				if (h < 0.0f)
-					h += 360.0f;
-				*/
 
 				if (max == g)
 				{
@@ -564,7 +551,6 @@ int vc_rgb_to_hsv(IVC* src, IVC* dst)
 			}
 
 
-			//                                  percentage  * bytesyze
 			datadst[pos_dst] = (unsigned char)((h / 360.0f) * 255.0f);
 			datadst[pos_dst + 1] = (unsigned char)(s * 255.0f);
 			datadst[pos_dst + 2] = (unsigned char)(v * 255.0f);
@@ -883,7 +869,6 @@ int vc_binary_dilate_fast(IVC* src, IVC* dst, int kernel)
 	prefix = (int*)malloc(prefixlen * sizeof(int));
 	if (!hpass || !prefix) { free(hpass); free(prefix); return 0; }
 
-	/* Horizontal pass: for each row, any white pixel in [x-k, x+k]? */
 	for (y = 0; y < height; y++) {
 		unsigned char* row = datasrc + y * bpl_src;
 		prefix[0] = 0;
@@ -896,7 +881,6 @@ int vc_binary_dilate_fast(IVC* src, IVC* dst, int kernel)
 		}
 	}
 
-	/* Vertical pass: for each column, any white pixel in [y-k, y+k]? */
 	for (x = 0; x < width; x++) {
 		prefix[0] = 0;
 		for (y = 0; y < height; y++)
@@ -937,7 +921,6 @@ int vc_binary_erode_fast(IVC* src, IVC* dst, int kernel)
 	prefix = (int*)malloc(prefixlen * sizeof(int));
 	if (!hpass || !prefix) { free(hpass); free(prefix); return 0; }
 
-	/* Horizontal pass: all pixels in [x-k, x+k] must be white */
 	for (y = 0; y < height; y++) {
 		unsigned char* row = datasrc + y * bpl_src;
 		prefix[0] = 0;
@@ -950,7 +933,6 @@ int vc_binary_erode_fast(IVC* src, IVC* dst, int kernel)
 		}
 	}
 
-	/* Vertical pass: all pixels in [y-k, y+k] must be white */
 	for (x = 0; x < width; x++) {
 		prefix[0] = 0;
 		for (y = 0; y < height; y++)
@@ -999,7 +981,6 @@ int vc_mask_crop(IVC* src, IVC* mask, IVC* dst)
 	if ((channels_src != 1) || (channels_mask != 1) || (channels_dst != 1))
 		return 0;
 
-	// Process
 	for (y = 0; y < height; y++)
 	{
 		for (x = 0; x < width; x++)
@@ -1009,9 +990,9 @@ int vc_mask_crop(IVC* src, IVC* mask, IVC* dst)
 			pos_dst = y * bytesperline_dst + x;
 
 			if (datamask[pos_mask] == 255)
-				datadst[pos_dst] = datasrc[pos_src]; // keep
+				datadst[pos_dst] = datasrc[pos_src];
 			else
-				datadst[pos_dst] = 0; // remove
+				datadst[pos_dst] = 0; 
 		}
 	}
 
@@ -1019,11 +1000,6 @@ int vc_mask_crop(IVC* src, IVC* mask, IVC* dst)
 }
 
 
-// Etiquetagem de blobs
-// src		: Imagem bin�ria de entrada
-// dst		: Imagem grayscale (ir� conter as etiquetas)
-// nlabels	: Endere�o de mem�ria de uma vari�vel, onde ser� armazenado o n�mero de etiquetas encontradas.
-// OVC*		: Retorna um array de estruturas de blobs (objectos), com respectivas etiquetas. � necess�rio libertar posteriormente esta mem�ria.
 OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 {
 	unsigned char* datasrc;
@@ -1057,12 +1033,10 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 	label_map = (int*)calloc((long int)width * height, sizeof(int));
 	if (!label_map) return NULL;
 
-	/* Initialise label_map: foreground=255, background=0 */
 	for (y = 0; y < height; y++)
 		for (x = 0; x < width; x++)
 			label_map[y * width + x] = (datasrc[y * bytesperline + x * channels] != 0) ? 255 : 0;
 
-	/* Clear image edges */
 	for (y = 0; y < height; y++) {
 		label_map[y * width + 0] = 0;
 		label_map[y * width + (width - 1)] = 0;
@@ -1072,7 +1046,6 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 		label_map[(height - 1) * width + x] = 0;
 	}
 
-	/* First pass: assign labels */
 	for (y = 1; y < height - 1; y++) {
 		for (x = 1; x < width - 1; x++) {
 			posA = (y - 1) * width + (x - 1);
@@ -1119,7 +1092,6 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 		}
 	}
 
-	/* Second pass: resolve label equivalences */
 	for (y = 1; y < height - 1; y++)
 		for (x = 1; x < width - 1; x++) {
 			posX = y * width + x;
@@ -1127,12 +1099,10 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 				label_map[posX] = labeltable[label_map[posX]];
 		}
 
-	/* Remove duplicate entries from labeltable */
 	for (a = 1; a < label - 1; a++)
 		for (b = a + 1; b < label; b++)
 			if (labeltable[a] == labeltable[b]) labeltable[b] = 0;
 
-	/* Compact: count distinct labels, store in labeltable[0..nlabels-1] */
 	*nlabels = 0;
 	for (a = 1; a < label; a++) {
 		if (labeltable[a] != 0) {
@@ -1143,13 +1113,11 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 
 	if (*nlabels == 0) { free(label_map); return NULL; }
 
-	/* Build reverse map: original label value -> sequential 1..N */
 	new_label = (int*)calloc(label, sizeof(int));
 	if (!new_label) { free(label_map); return NULL; }
 	for (a = 0; a < *nlabels; a++)
 		new_label[labeltable[a]] = a + 1;
 
-	/* Write sequential labels back to dst IVC (safe for N <= 254) */
 	for (y = 0; y < height; y++)
 		for (x = 0; x < width; x++) {
 			int lbl = label_map[y * width + x];
@@ -1158,7 +1126,6 @@ OVC* vc_binary_blob_labelling(IVC* src, IVC* dst, int* nlabels)
 				? (unsigned char)new_label[lbl] : 0;
 		}
 
-	/* Create blob array with sequential labels matching dst IVC */
 	blobs = (OVC*)calloc(*nlabels, sizeof(OVC));
 	if (!blobs) { free(new_label); free(label_map); return NULL; }
 	for (a = 0; a < *nlabels; a++) blobs[a].label = a + 1;
@@ -1180,11 +1147,9 @@ int vc_binary_blob_info(IVC* src, OVC* blobs, int nblobs)
 	int xmin, ymin, xmax, ymax;
 	long int sumx, sumy;
 
-	// Verifica��o de erros
 	if ((src->width <= 0) || (src->height <= 0) || (src->data == NULL)) return 0;
 	if (channels != 1) return 0;
 
-	// Conta �rea de cada blob
 	for (i = 0; i < nblobs; i++)
 	{
 		xmin = width - 1;
@@ -1271,7 +1236,6 @@ int vc_draw_blobs(
 		int xc = blobs[i].xc;
 		int yc = blobs[i].yc;
 
-		// ----------- DRAW RECTANGLE -----------
 		for (t = 0; t < thickness; t++)
 		{
 			// Top & Bottom
@@ -1304,7 +1268,6 @@ int vc_draw_blobs(
 				}
 			}
 
-			// Left & Right
 			for (y = ymin; y <= ymax; y++)
 			{
 				if (xmin + t >= 0 && xmin + t < width && y >= 0 && y < height)
@@ -1335,12 +1298,10 @@ int vc_draw_blobs(
 			}
 		}
 
-		// ----------- DRAW CROSS -----------
 		int size = 5;
 
 		for (t = -thickness / 2; t <= thickness / 2; t++)
 		{
-			// Horizontal
 			for (x = xc - size; x <= xc + size; x++)
 			{
 				if (x >= 0 && x < width && yc + t >= 0 && yc + t < height)
@@ -1357,7 +1318,6 @@ int vc_draw_blobs(
 				}
 			}
 
-			// Vertical
 			for (y = yc - size; y <= yc + size; y++)
 			{
 				if (y >= 0 && y < height && xc + t >= 0 && xc + t < width)
@@ -1418,10 +1378,6 @@ int compare_int(const void* a, const void* b)
 	return (*(int*)a - *(int*)b);
 }
 
-// Filters blobs that fail the EEC 379/71 admission criteria:
-//   - deformation > VC_FILTER_DEFORM_MAX  (shape too irregular)
-//   - diameter_mm < VC_MIN_DIAMETER_MM    (below minimum size of 53 mm)
-// Requires vc_orange_classify() to have been called first.
 OVC* vc_blob_filter_deformation(OVC* blobs, int* nblobs)
 {
 	int i, count = 0;
@@ -1480,8 +1436,6 @@ static const int vc_orange_size_table[14][2] = {
 	{ 53,  60}, /* 13 */
 };
 
-// Deformation thresholds moved to vc.h (VC_DEFORM_EXTRA / _I / _II)
-
 int vc_orange_classify(OVC* blobs, int nblobs)
 {
 	int i, c;
@@ -1492,34 +1446,29 @@ int vc_orange_classify(OVC* blobs, int nblobs)
 
 	for (i = 0; i < nblobs; i++)
 	{
-		// ---- Diameter & Calibre ----
 		float diam_px = (blobs[i].width + blobs[i].height) / 2.0f;
 		blobs[i].diameter_mm = diam_px * px_to_mm;
 
-		// Assign calibre by finding the range whose centre is closest to the
-		// measured diameter. Requires the diameter to actually fall inside the range.
+		
 		blobs[i].calibre = -1;
 		float best_dist = 1e9f;
-		for (c = 0; c < 14; c++)// para cada calibre
+		for (c = 0; c < 14; c++)
 		{
 			float lo = (float)vc_orange_size_table[c][0];
 			float hi = (float)vc_orange_size_table[c][1];
 			if (blobs[i].diameter_mm < lo || blobs[i].diameter_mm > hi)
 				continue;
-			float centre = (lo + hi) / 2.0f; // meio do intervalo 100+87/2 = 93.5
-			float dist = blobs[i].diameter_mm - centre; // distancia do centro do intervalo ex 94- 93.5 = 0.5
-			if (dist < 0.0f) dist = -dist; // absoluto, nao permite negativo
+			float centre = (lo + hi) / 2.0f;
+			float dist = blobs[i].diameter_mm - centre; 
+			if (dist < 0.0f) dist = -dist; 
 
-			if (dist < best_dist) // best_dist começa a 1m, entao o primeiro é o menor, mas depois o melhor é o que tiver a menor distancia do centro do intervalo
+			if (dist < best_dist) 
 			{
 				best_dist = dist;
 				blobs[i].calibre = c;
 			}
 		}
 
-		// ---- Shape deformation ----
-		// Compares the blob's actual area to the area of an ideal circle whose
-		// diameter equals the longest bounding-box dimension.
 		float max_dim = (blobs[i].width > blobs[i].height)
 			? (float)blobs[i].width : (float)blobs[i].height;
 		float ideal_area = pi * (max_dim / 2.0f) * (max_dim / 2.0f);
@@ -1528,15 +1477,14 @@ int vc_orange_classify(OVC* blobs, int nblobs)
 		blobs[i].deformation = (ideal_area > 0.0f)
 			? (diff / ideal_area * 100.0f) : 0.0f;
 
-		// ---- Quality Category (EEC 379/71 Section II.D) ----
 		if (blobs[i].deformation < VC_DEFORM_EXTRA)
-			blobs[i].category = 0; // Extra
+			blobs[i].category = 0; 
 		else if (blobs[i].deformation < VC_DEFORM_I)
-			blobs[i].category = 1; // Class I
+			blobs[i].category = 1; 
 		else if (blobs[i].deformation < VC_DEFORM_II)
-			blobs[i].category = 2; // Class II
+			blobs[i].category = 2; 
 		else
-			blobs[i].category = 3; // Class III
+			blobs[i].category = 3; 
 
 		{
 			int spot_cat;
@@ -1565,14 +1513,6 @@ const char* vc_orange_category_name(int category)
 }
 
 
-// Conta laranjas novas comparando centroidos da frame atual com a frame anterior.
-// Uma laranja e considerada nova se nao existir nenhum blob na frame anterior
-// cujo centroide esteja a menos de 'distancia_max' pixels.
-// prev_xc e prev_yc: arrays com os centroidos da frame anterior (tamanho MAX_BLOBS)
-// prev_count: numero de blobs na frame anterior
-// total: contador acumulado total (so cresce)
-// VC_MAX_BLOBS and VC_DIST_MAX are defined in vc.h
-
 int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, int* prev_count, int* total)
 {
 	int i, j, nova;
@@ -1581,17 +1521,16 @@ int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, in
 	if (blobs == NULL || prev_xc == NULL || prev_yc == NULL || prev_count == NULL || total == NULL)
 		return 0;
 
-	// Para cada blob da frame atual, verifica se e novo (nao existia na frame anterior)
 	for (i = 0; i < nlabels; i++)
 	{
-		nova = 1; // assume que e nova
+		nova = 1; 
 
 		for (j = 0; j < *prev_count; j++)
 		{
 			dx = blobs[i].xc - prev_xc[j];
 			dy = blobs[i].yc - prev_yc[j];
 
-			// Se existir um blob proximo na frame anterior, nao e nova
+			
 			if ((dx * dx + dy * dy) < (VC_DIST_MAX * VC_DIST_MAX))
 			{
 				nova = 0;
@@ -1603,7 +1542,6 @@ int vc_count_new_oranges(OVC* blobs, int nlabels, int* prev_xc, int* prev_yc, in
 			(*total)++;
 	}
 
-	// Atualiza os centroidos da frame anterior para a proxima chamada
 	*prev_count = nlabels;
 	if (nlabels > VC_MAX_BLOBS) nlabels = VC_MAX_BLOBS;
 	for (i = 0; i < nlabels; i++)
@@ -1667,27 +1605,9 @@ int vc_blob_count_dark_spots(IVC* spot_binary, IVC* label_image, OVC* blobs, int
 }
 
 
-/* Detect dark spots via local mean subtraction using a 2D integral image.
- *
- * For each non-zero pixel p inside the orange mask:
- *   background = mean of non-zero pixels in the (kernel x kernel) window
- *   residual   = background - src[p]
- *   dst[p]     = (residual > threshold) ? 255 : 0
- *
- * Large smooth shadows have a similar value to their neighborhood mean, so
- * residual ≈ 0 and they are suppressed.  Compact dark spots are much darker
- * than the local mean, producing a large positive residual that survives the
- * threshold.
- *
- * Uses two summed-area tables (integral images) for sum and count of non-zero
- * pixels so the per-pixel query is O(1) and the total cost is O(W*H)
- * regardless of kernel size.  Memory: two int[W*H] heap arrays (~7 MB for
- * 1280x720), freed before returning. */
+
 int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int threshold)
 {
-	// -----------------------------
-	// Basic image pointers + sizes
-	// -----------------------------
 	unsigned char* src = masked_gray->data;
 	unsigned char* out = dst->data;
 
@@ -1695,21 +1615,13 @@ int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int thresh
 	int height = masked_gray->height;
 	int bpl = masked_gray->bytesperline;
 
-	// safety checks (same behavior)
 	if (!masked_gray || !dst) return 0;
 	if (!src || !out) return 0;
 	if (width <= 0 || height <= 0) return 0;
 	if (width != dst->width || height != dst->height) return 0;
 	if (masked_gray->channels != 1 || dst->channels != 1) return 0;
 
-	// kernel radius (e.g. kernel=21 → k=10)
 	int k = kernel / 2;
-
-	// -------------------------------------------------------
-	// Integral images (summed-area tables)
-	// -------------------------------------------------------
-	// isum[y,x] = sum of all NON-ZERO pixels from (0,0)->(y,x)
-	// icnt[y,x] = count of NON-ZERO pixels from (0,0)->(y,x)
 
 	int* isum = calloc(width * height, sizeof(int));
 	int* icnt = calloc(width * height, sizeof(int));
@@ -1720,28 +1632,19 @@ int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int thresh
 		return 0;
 	}
 
-	// =======================================================
-	// 1) BUILD INTEGRAL IMAGES
-	// =======================================================
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 
 			int idx = y * width + x;
 
-			// current pixel (0 if background)
 			int v = src[y * bpl + x];
 
-			// we ONLY consider non-zero pixels (mask behavior)
 			int val = (v > 0) ? v : 0;
 			int cnt = (v > 0) ? 1 : 0;
 
-			// neighbors in integral image
 			int left = (x > 0) ? idx - 1 : -1;
 			int above = (y > 0) ? idx - width : -1;
 			int diag = (x > 0 && y > 0) ? idx - width - 1 : -1;
-
-			// standard integral image formula:
-			// I(x,y) = current + left + above - diag
 
 			isum[idx] =
 				val
@@ -1757,34 +1660,20 @@ int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int thresh
 		}
 	}
 
-	// =======================================================
-	// 2) LOCAL THRESHOLDING USING WINDOW
-	// =======================================================
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 
 			int pos = y * bpl + x;
 
-			// background pixels stay zero
 			if (src[pos] == 0) {
 				out[pos] = 0;
 				continue;
 			}
 
-			// -----------------------------
-			// define local window
-			// -----------------------------
 			int x0 = (x - k > 0) ? x - k : 0;
 			int y0 = (y - k > 0) ? y - k : 0;
 			int x1 = (x + k < width - 1) ? x + k : width - 1;
 			int y1 = (y + k < height - 1) ? y + k : height - 1;
-
-			// -------------------------------------------------
-			// FAST WINDOW SUM using integral image trick:
-			//
-			// Example:
-			// window sum = A - B - C + D
-			// -------------------------------------------------
 
 			int A = isum[y1 * width + x1];
 			int B = (x0 > 0) ? isum[y1 * width + (x0 - 1)] : 0;
@@ -1794,7 +1683,6 @@ int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int thresh
 
 			int window_sum = A - B - C + D;
 
-			// same for count of valid pixels
 			int NA = icnt[y1 * width + x1];
 			int NB = (x0 > 0) ? icnt[y1 * width + (x0 - 1)] : 0;
 			int NC = (y0 > 0) ? icnt[(y0 - 1) * width + x1] : 0;
@@ -1803,35 +1691,15 @@ int vc_gray_local_mean_detect(IVC* masked_gray, IVC* dst, int kernel, int thresh
 
 			int window_count = NA - NB - NC + ND;
 
-			// avoid division by zero
 			if (window_count == 0) {
 				out[pos] = 0;
 				continue;
 			}
 
-			// -------------------------------------------------
-			// LOCAL MEAN BACKGROUND ESTIMATION
-			// -------------------------------------------------
-
 			int mean = window_sum / window_count;
-
-			/*
-			 * Example:
-			 * window_sum = 2000
-			 * window_count = 25
-			 * mean = 80
-			 *
-			 * current pixel = 40
-			 *
-			 * residual = 80 - 40 = 40
-			 */
 
 			int residual = mean - (int)src[pos];
 
-			// -------------------------------------------------
-			// FINAL DECISION
-			// -------------------------------------------------
-			// If pixel is much darker than local mean → spot
 			out[pos] = (residual > threshold) ? 255 : 0;
 		}
 	}
@@ -1861,9 +1729,6 @@ int vc_gray_local_mean_detect_fast(IVC* img, IVC* dst, int kernel, int threshold
 	Cell* sat = calloc(w * h, sizeof(Cell));
 	if (!sat) return 0;
 
-	// --------------------------
-	// Build SAT (fused structure)
-	// --------------------------
 	for (int y = 0; y < h; y++) {
 		Cell* row = sat + y * w;
 		Cell* row_up = (y > 0) ? sat + (y - 1) * w : NULL;
@@ -1884,9 +1749,6 @@ int vc_gray_local_mean_detect_fast(IVC* img, IVC* dst, int kernel, int threshold
 		}
 	}
 
-	// --------------------------
-	// Query
-	// --------------------------
 	for (int y = 0; y < h; y++) {
 		for (int x = 0; x < w; x++) {
 
@@ -1927,9 +1789,6 @@ int vc_gray_local_mean_detect_fast(IVC* img, IVC* dst, int kernel, int threshold
 	return 1;
 }
 
-/* Binary image subtraction: white pixels in 'subtrahend' turn the
- * corresponding white pixels in 'src' to black in 'dst'.
- * dst[p] = (src[p] == 255 && subtrahend[p] == 255) ? 0 : src[p] */
 int vc_binary_subtract(IVC* src, IVC* subtrahend, IVC* dst)
 {
 	unsigned char* datasrc;
