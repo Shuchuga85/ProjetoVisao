@@ -1,13 +1,4 @@
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//           INSTITUTO POLITÉCNICO DO CÁVADO E DO AVE
-//                          2025/2026
-//             ENGENHARIA DE SISTEMAS INFORM�TICOS
-//                    VISÃO POR COMPUTADOR
-//             [  DUARTE DUQUE - dduque@ipca.pt  ]
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-
-// Desabilita (no MSVC++) warnings de fun��es n�o seguras (fopen, sscanf, etc...)
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <stdio.h>
@@ -17,11 +8,6 @@
 #include <malloc.h>
 #include <math.h>
 #include "vc.h"
-
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//            FUN��ES: ALOCAR E LIBERTAR UMA IMAGEM
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 IVC *vc_image_new(int width, int height, int channels, int levels)
@@ -64,10 +50,6 @@ IVC *vc_image_free(IVC *image)
 	return image;
 }
 
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//    FUN��ES: LEITURA E ESCRITA DE IMAGENS (PBM, PGM E PPM)
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 char *netpbm_get_token(FILE *file, char *tok, int len)
@@ -122,14 +104,7 @@ long int unsigned_char_to_bit(unsigned char *datauchar, unsigned char *databit, 
 
 			if(countbits <= 8)
 			{
-				// Numa imagem PBM:
-				// 1 = Preto
-				// 0 = Branco
-				//*p |= (datauchar[pos] != 0) << (8 - countbits);
 				
-				// Na nossa imagem:
-				// 1 = Branco
-				// 0 = Preto
 				*p |= (datauchar[pos] == 0) << (8 - countbits);
 
 				countbits++;
@@ -165,14 +140,7 @@ void bit_to_unsigned_char(unsigned char *databit, unsigned char *datauchar, int 
 
 			if(countbits <= 8)
 			{
-				// Numa imagem PBM:
-				// 1 = Preto
-				// 0 = Branco
-				//datauchar[pos] = (*p & (1 << (8 - countbits))) ? 1 : 0;
-
-				// Na nossa imagem:
-				// 1 = Branco
-				// 0 = Preto
+				
 				datauchar[pos] = (*p & (1 << (8 - countbits))) ? 0 : 1;
 				
 				countbits++;

@@ -6,11 +6,7 @@
 #include <opencv2\videoio.hpp>
 #include <opencv2/video/background_segm.hpp>
 #define DEBUG 0
-// 0 = Original RGB with bounding boxes
-// 1 = Orange segmentation (temps[2], after morphological close)
-// 2 = Masked grayscale (orange area only)
-// 3 = Dark spot binary (spot_binary)
-// 4 = Orange segmentation minus detected dark spots (temps[2] - spot_binary)
+
 
 extern "C" {
 #include "vc.h"
@@ -138,6 +134,7 @@ int main(void) {
 
 		memcpy(image->data, frame.data, video.width * video.height * 3);
 
+
 		vc_bgr_to_rgb(image, rgb);
 		vc_rgb_to_hsv(rgb, hsv);
 		vc_hsv_segmentation(hsv, temps[1],
@@ -145,7 +142,6 @@ int main(void) {
 			VC_ORANGE_S_MIN, VC_ORANGE_S_MAX,
 			VC_ORANGE_V_MIN, VC_ORANGE_V_MAX);
 		vc_binary_close(temps[1], temps[2], 3, 3);
-
 
 
 		vc_rgb_to_gray(rgb, gray);

@@ -1,33 +1,15 @@
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//           INSTITUTO POLIT�CNICO DO C�VADO E DO AVE
-//                          2022/2023
-//             ENGENHARIA DE SISTEMAS INFORM�TICOS
-//                    VIS�O POR COMPUTADOR
-//
-//             [  DUARTE DUQUE - dduque@ipca.pt  ]
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-
 #define VC_DEBUG
 
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//                   ESTRUTURA DE UMA IMAGEM
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 typedef struct {
 	unsigned char *data;
 	int width, height;
-	int channels;			// Bin�rio/Cinzentos=1; RGB=3
-	int levels;				// Bin�rio=1; Cinzentos [1,255]; RGB [1,255]
-	int bytesperline;		// width * channels
+	int channels;			
+	int levels;				
+	int bytesperline;		
 } IVC;
 
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//                   ESTRUTURA DE UM BLOB (OBJECTO)
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 typedef struct {
 	int x, y, width, height;	// Caixa Delimitadora (Bounding Box)
@@ -68,7 +50,7 @@ typedef struct {
 #define VC_DEFORM_II     20.0f
 
 #define VC_MIN_DIAMETER_MM    53.0f   
-#define VC_FILTER_DEFORM_MAX  VC_DEFORM_II  
+#define VC_FILTER_DEFORM_MAX  20.0f
 
 #define VC_MAX_BLOBS  64
 #define VC_DIST_MAX   80
